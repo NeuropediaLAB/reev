@@ -1,0 +1,42 @@
+# Datos y bases de datos
+data/
+*.backup.*
+
+# Logs
+logs/
+*.log
+nohup.out
+
+# Archivos temporales
+*.tmp
+.update_lock
+compile_progress.log
+cadd_gnomad_progress.log
+compilation_master.log
+compilation_full.log
+download_*.log
+
+# Archivos de configuración local
+.env.local
+*.local
+
+# Docker volumes
+postgres-data/
+redis-data/
+
+# Archivos grandes
+*.tar.gz
+*.zip
+*.zst
+*.bin.zst
+
+# Backups
+*.old
+*.bak
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Node modules (si hay)
+node_modules/

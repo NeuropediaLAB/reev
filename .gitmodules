@@ -1,0 +1,9 @@
+[submodule "annonars"]
+path = annonars
+url = https://github.com/varfish-org/annonars.git
+[submodule "mehari"]
+path = mehari
+url = https://github.com/varfish-org/mehari.git
+[submodule "reev-frontend"]
+path = reev-frontend
+url = https://github.com/varfish-org/reev.git
