@@ -35,11 +35,14 @@ services:
       context: ./annonars
       dockerfile: utils/docker/Dockerfile
     ports:
-      - "3001:8080"
+      - "3010:8080"
     environment:
       - RUST_LOG=info
     volumes:
       - ./data/annonars:/data:ro
+      - ./data/sources:/sources:ro
+      - ./data/grch37:/data/grch37:rw
+      - ./data/grch38:/data/grch38:rw
     restart: unless-stopped
     networks:
       - reev-network
@@ -54,9 +57,10 @@ services:
       dockerfile: utils/docker/Dockerfile
     container_name: reev-mehari
     ports:
-      - "3002:8080"
+      - "3011:8080"
     environment:
       - RUST_LOG=info
+      - PATH_DB=/data
     volumes:
       - ./data/mehari:/data:ro
     restart: unless-stopped
@@ -66,18 +70,27 @@ services:
       - postgres
       - redis
 
-  # REEV Frontend
-  reev-frontend:
+  # REEV Frontend + Backend
+  reev:
     build:
       context: ./reev-frontend
       dockerfile: utils/docker/Dockerfile
     container_name: reev-frontend
     ports:
-      - "3003:80"
+      - "3020:8080"
     environment:
-      - VITE_API_BASE_URL=http://192.168.0.105:3000
-      - VITE_ANNONARS_URL=http://192.168.0.105:3001
-      - VITE_MEHARI_URL=http://192.168.0.105:3002
+      - REEV_ANNONARS_URL=http://annonars:8080
+      - REEV_MEHARI_URL=http://mehari:8080
+      - REEV_DOTTY_URL=http://dotty:3000
+      - REEV_VIGUNO_URL=http://viguno:8080
+      - REEV_NGINX_URL=http://nginx:8080
+      - SERVE_FRONTEND=/home/reev/ui
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=reev
+      - POSTGRES_USER=reev
+      - POSTGRES_PASSWORD=reev_password
+      - REDIS_URL=redis://redis:6379/0
     restart: unless-stopped
     networks:
       - reev-network

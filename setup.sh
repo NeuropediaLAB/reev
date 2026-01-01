@@ -33,6 +33,22 @@ if ! docker compose version &> /dev/null; then
 fi
 echo -e "${GREEN}✓ Docker Compose instalado${NC}"
 
+# Clonar repositorios si no existen
+echo "3️⃣  Verificando repositorios..."
+if [ ! -d "annonars" ]; then
+    echo "📦 Clonando annonars..."
+    git clone --depth 1 https://github.com/varfish-org/annonars.git
+fi
+if [ ! -d "mehari" ]; then
+    echo "📦 Clonando mehari..."
+    git clone --depth 1 https://github.com/varfish-org/mehari.git
+fi
+if [ ! -d "reev-frontend" ]; then
+    echo "📦 Clonando reev-frontend..."
+    git clone --depth 1 https://github.com/bihealth/reev.git reev-frontend
+fi
+echo -e "${GREEN}✓ Repositorios listos${NC}"
+
 # Advertencia sobre datos
 echo ""
 echo -e "${YELLOW}⚠️  IMPORTANTE: DESCARGA DE BASES DE DATOS${NC}"
@@ -87,20 +103,20 @@ case $OPTION in
 esac
 
 echo ""
-echo "3️⃣  Construyendo imágenes Docker..."
+echo "4️⃣  Construyendo imágenes Docker..."
 echo "⏰ Esto puede tomar 10-30 minutos..."
 docker compose build
 
 echo ""
-echo "4️⃣  Iniciando servicios..."
+echo "5️⃣  Iniciando servicios..."
 docker compose up -d
 
 echo ""
-echo "5️⃣  Esperando a que los servicios estén listos..."
+echo "6️⃣  Esperando a que los servicios estén listos..."
 sleep 10
 
 echo ""
-echo "6️⃣  Verificando estado..."
+echo "7️⃣  Verificando estado..."
 docker compose ps
 
 echo ""

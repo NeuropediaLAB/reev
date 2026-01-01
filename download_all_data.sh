@@ -65,31 +65,42 @@ echo ""
 
 cd data/annonars
 
-# Annonars download links from previous search
-ANNONARS_GRCH37_URL="https://github.com/varfish-org/annonars/releases/download/2023-11-07/annonars-data-grch37-20231107.tar.gz"
-ANNONARS_GRCH38_URL="https://github.com/varfish-org/annonars/releases/download/2023-11-07/annonars-data-grch38-20231107.tar.gz"
+# Create necessary directories
+mkdir -p grch37 grch38
 
-echo -e "${BLUE}Descargando Annonars GRCh37...${NC}"
-if [ ! -f "annonars-data-grch37-20231107.tar.gz" ] || [ ! -s "annonars-data-grch37-20231107.tar.gz" ]; then
-    wget -c "${ANNONARS_GRCH37_URL}" -O annonars-data-grch37-20231107.tar.gz
+# Annonars ClinVar latest version
+CLINVAR_DATE="20251228"
+ANNONARS_VERSION="0.44.0"
+
+echo -e "${BLUE}Descargando Annonars ClinVar GRCh37...${NC}"
+if [ ! -d "grch37/clinvar/rocksdb" ]; then
+    wget -c "https://github.com/varfish-org/annonars-data-clinvar/releases/download/annonars-data-clinvar-${CLINVAR_DATE}/annonars-clinvar-minimal-grch37-${CLINVAR_DATE}+${ANNONARS_VERSION}.tar.gz" -O clinvar-grch37.tar.gz
     echo "Extrayendo..."
-    tar xzf annonars-data-grch37-20231107.tar.gz
-    rm annonars-data-grch37-20231107.tar.gz
-    echo -e "${GREEN}✓ GRCh37 descargado y extraído${NC}"
+    tar xzf clinvar-grch37.tar.gz -C grch37/
+    mv grch37/annonars-clinvar-minimal-grch37-${CLINVAR_DATE}+${ANNONARS_VERSION}/rocksdb grch37/clinvar/
+    rm -rf grch37/annonars-clinvar-minimal-grch37-${CLINVAR_DATE}+${ANNONARS_VERSION}
+    rm clinvar-grch37.tar.gz
+    echo -e "${GREEN}✓ ClinVar GRCh37 descargado y extraído${NC}"
 else
-    echo -e "${YELLOW}⊙ GRCh37 ya existe, omitiendo...${NC}"
+    echo -e "${YELLOW}⊙ ClinVar GRCh37 ya existe, omitiendo...${NC}"
 fi
 
-echo -e "${BLUE}Descargando Annonars GRCh38...${NC}"
-if [ ! -f "annonars-data-grch38-20231107.tar.gz" ] || [ ! -s "annonars-data-grch38-20231107.tar.gz" ]; then
-    wget -c "${ANNONARS_GRCH38_URL}" -O annonars-data-grch38-20231107.tar.gz
+echo -e "${BLUE}Descargando Annonars ClinVar GRCh38...${NC}"
+if [ ! -d "grch38/clinvar/rocksdb" ]; then
+    wget -c "https://github.com/varfish-org/annonars-data-clinvar/releases/download/annonars-data-clinvar-${CLINVAR_DATE}/annonars-clinvar-minimal-grch38-${CLINVAR_DATE}+${ANNONARS_VERSION}.tar.gz" -O clinvar-grch38.tar.gz
     echo "Extrayendo..."
-    tar xzf annonars-data-grch38-20231107.tar.gz
-    rm annonars-data-grch38-20231107.tar.gz
-    echo -e "${GREEN}✓ GRCh38 descargado y extraído${NC}"
+    tar xzf clinvar-grch38.tar.gz -C grch38/
+    mv grch38/annonars-clinvar-minimal-grch38-${CLINVAR_DATE}+${ANNONARS_VERSION}/rocksdb grch38/clinvar/
+    rm -rf grch38/annonars-clinvar-minimal-grch38-${CLINVAR_DATE}+${ANNONARS_VERSION}
+    rm clinvar-grch38.tar.gz
+    echo -e "${GREEN}✓ ClinVar GRCh38 descargado y extraído${NC}"
 else
-    echo -e "${YELLOW}⊙ GRCh38 ya existe, omitiendo...${NC}"
+    echo -e "${YELLOW}⊙ ClinVar GRCh38 ya existe, omitiendo...${NC}"
 fi
+
+echo ""
+echo -e "${YELLOW}⚠️  NOTA: Para bases de datos adicionales (gnomAD, dbSNP, CADD, etc.)${NC}"
+echo -e "${YELLOW}    ejecuta: ./compile_CADD_gnomAD.sh${NC}"
 
 cd ../..
 
@@ -102,15 +113,19 @@ du -sh data/annonars/grch*/clinvar/rocksdb 2>/dev/null || echo "Verificando Anno
 
 
 echo ""
-echo -e "${BLUE}🔄 Iniciando servicios...${NC}"
-docker compose up -d annonars mehari
-
-echo ""
 echo -e "${GREEN}✅ Proceso completado${NC}"
 echo ""
-echo "Para ver los logs:"
-echo "  docker compose logs -f mehari"
-echo "  docker compose logs -f annonars"
+echo -e "${YELLOW}⚠️  SIGUIENTES PASOS:${NC}"
 echo ""
-echo "Para verificar estado:"
-echo "  docker compose ps"
+echo "1. Si no has clonado los repositorios, ejecuta:"
+echo "   ./setup.sh"
+echo ""
+echo "2. Para bases de datos adicionales (gnomAD, CADD, etc.):"
+echo "   ./compile_CADD_gnomAD.sh"
+echo ""
+echo "3. Para iniciar los servicios:"
+echo "   docker compose up -d"
+echo ""
+echo "4. Para ver los logs:"
+echo "   docker compose logs -f mehari"
+echo "   docker compose logs -f annonars"
