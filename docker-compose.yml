@@ -1,111 +1,315 @@
-version: '3.8'
+---
+# REEV v0.6.0 — Khazad-dum deployment (no traefik, NPM handles SSL)
+# Data on NAS via sshfs: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/
+
+version: "3.9"
+
+# == Reusable Definitions ====================================================
+
+x-service-default: &service_default
+  env_file:
+    - .env
+  networks:
+    - reev
+  restart: unless-stopped
+
+# All bioinformatics services get /data → reev-static/data (read-only)
+x-service-internal: &service_internal
+  <<: *service_default
+  volumes:
+    - type: bind
+      source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data
+      target: /data
+      read_only: true
+
+x-service-reev-default: &service_reev_default
+  <<: *service_default
+  image: "ghcr.io/bihealth/reev:main"
+  environment:
+    POSTGRES_PASSWORD: "reev-db-jPc1Fk3XoUXurUmz4R8arA"
+  secrets:
+    - db-password
+  depends_on:
+    - annonars
+    - cada-prio
+    - dotty
+    - mehari
+    - nginx
+    - postgres
+    - rabbitmq
+    - redis
+    - viguno
+
+# == Services ================================================================
 
 services:
-  # PostgreSQL - Base de datos principal
-  postgres:
-    image: postgres:15-alpine
-    container_name: reev-postgres
+  # -- nginx (static files) --------------------------------------------------
+  nginx:
+    <<: *service_default
+    container_name: reev-nginx
+    hostname: nginx
+    image: nginx:1
+    volumes:
+      - type: bind
+        source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data
+        target: /data
+        read_only: true
+      - type: bind
+        source: /home/arkantu/workspace/reev/config/nginx/nginx.conf
+        target: /etc/nginx/nginx.conf
+
+  # -- REEV backend ----------------------------------------------------------
+  reev-backend:
+    <<: *service_reev_default
+    container_name: reev-backend
+    hostname: reev-backend
+    image: "ghcr.io/bihealth/reev:0.6.0"
+    ports:
+      - "8200:8080"
     environment:
-      POSTGRES_USER: reev
-      POSTGRES_PASSWORD: reev_password
-      POSTGRES_DB: reev
-    ports:
-      - "5432:5432"
+      FORWARDED_ALLOW_IPS: "*"
+      POSTGRES_PASSWORD: "reev-db-jPc1Fk3XoUXurUmz4R8arA"
+      POSTGRES_HOST: postgres
+      SERVE_FRONTEND: /home/reev/ui
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-    restart: unless-stopped
-    networks:
-      - reev-network
+      # Patches: (1) null-check for ucsc_conservation GRCh37, (2) clinvar records wrapper,
+      #          (3) dotty SPDI response format, (4) pubtator3 abstract null-check
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-ui-patches/index-jMqp1mrs.js
+        target: /home/reev/ui/assets/index-jMqp1mrs.js
+        read_only: true
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-ui-patches/index.html
+        target: /home/reev/ui/index.html
+        read_only: true
+      # Backend patch: raise httpx proxy timeout (120s) for NAS-backed services
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-backend-patches/proxy.py
+        target: /home/reev/app/api/internal/endpoints/proxy.py
+        read_only: true
+      # Backend patch: WinterVar non-JSON response → default ACMG rating instead of 500
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-backend-patches/remote.py
+        target: /home/reev/app/api/internal/endpoints/remote.py
+        read_only: true
+      # UI patch: GeneLiteratureCard optional-chain on abstract.pmid/journal/date/passages
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-ui-patches/GeneLiteratureCard-Av9mbsqx.js
+        target: /home/reev/ui/assets/GeneLiteratureCard-Av9mbsqx.js
+        read_only: true
+      # UI patch: SeqvarScoresCard CADD fallback for SIFT, PolyPhen2 HVAR, Gerp++ when dbNSFP missing (GRCh37)
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-ui-patches/SeqvarScoresCard-QuWJsaiW.js
+        target: /home/reev/ui/assets/SeqvarScoresCard-QuWJsaiW.js
+        read_only: true
 
-  # Redis - Cache
-  redis:
-    image: redis:7-alpine
-    container_name: reev-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    restart: unless-stopped
-    networks:
-      - reev-network
-
-  # Annonars - Servicio de anotaciones
-  annonars:
-    build:
-      context: ./annonars
-      dockerfile: utils/docker/Dockerfile
-    ports:
-      - "3010:8080"
+  # -- REEV celery worker ----------------------------------------------------
+  reev-celery-worker:
+    <<: *service_reev_default
+    container_name: reev-celery-worker
+    hostname: reev-celery-worker
+    image: "ghcr.io/bihealth/reev:0.6.0"
     environment:
-      - RUST_LOG=info
-    volumes:
-      - ./data/annonars:/data:ro
-      - ./data/sources:/sources:ro
-      - ./data/grch37:/data/grch37:rw
-      - ./data/grch38:/data/grch38:rw
-    restart: unless-stopped
-    networks:
-      - reev-network
-    depends_on:
-      - postgres
-      - redis
+      POSTGRES_PASSWORD: "reev-db-jPc1Fk3XoUXurUmz4R8arA"
+      POSTGRES_HOST: postgres
+    entrypoint:
+      - /entrypoint-celery-worker.sh
 
-  # Mehari - Consecuencias moleculares
+  # -- REEV celery beat ------------------------------------------------------
+  reev-celery-beat:
+    <<: *service_reev_default
+    container_name: reev-celery-beat
+    hostname: reev-celery-beat
+    image: "ghcr.io/bihealth/reev:0.6.0"
+    environment:
+      POSTGRES_PASSWORD: "reev-db-jPc1Fk3XoUXurUmz4R8arA"
+      POSTGRES_HOST: postgres
+    entrypoint:
+      - /entrypoint-celery-beat.sh
+
+  # -- Dotty -----------------------------------------------------------------
+  dotty:
+    <<: *service_internal
+    container_name: reev-dotty
+    hostname: dotty
+    image: "ghcr.io/bihealth/dotty:0.2.1"
+    environment:
+      DATA_DIR: /data/dotty
+
+  # -- Mehari ----------------------------------------------------------------
   mehari:
-    build:
-      context: ./mehari
-      dockerfile: utils/docker/Dockerfile
+    <<: *service_internal
     container_name: reev-mehari
-    ports:
-      - "3011:8080"
+    hostname: mehari
+    image: "ghcr.io/varfish-org/mehari:0.25.3"
     environment:
-      - RUST_LOG=info
-      - PATH_DB=/data
-    volumes:
-      - ./data/mehari:/data:ro
-    restart: unless-stopped
-    networks:
-      - reev-network
-    depends_on:
-      - postgres
-      - redis
+      PATH_DB: /data/mehari
 
-  # REEV Frontend + Backend
-  reev:
-    build:
-      context: ./reev-frontend
-      dockerfile: utils/docker/Dockerfile
-    container_name: reev-frontend
-    ports:
-      - "3020:8080"
+  # -- Viguno ----------------------------------------------------------------
+  viguno:
+    <<: *service_internal
+    container_name: reev-viguno
+    hostname: viguno
+    image: "ghcr.io/varfish-org/viguno:0.3.1"
+
+  # -- Annonars --------------------------------------------------------------
+  annonars:
+    <<: *service_internal
+    container_name: reev-annonars
+    hostname: annonars
+    image: "ghcr.io/varfish-org/annonars:0.39.0"
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+
+  # -- Auto-ACMG ------------------------------------------------------------
+  auto-acmg:
+    <<: *service_default
+    container_name: reev-auto-acmg
+    hostname: auto-acmg
+    image: "ghcr.io/bihealth/auto-acmg:main"
     environment:
-      - REEV_ANNONARS_URL=http://annonars:8080
-      - REEV_MEHARI_URL=http://mehari:8080
-      - REEV_DOTTY_URL=http://dotty:3000
-      - REEV_VIGUNO_URL=http://viguno:8080
-      - REEV_NGINX_URL=http://nginx:8080
-      - SERVE_FRONTEND=/home/reev/ui
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=reev
-      - POSTGRES_USER=reev
-      - POSTGRES_PASSWORD=reev_password
-      - REDIS_URL=redis://redis:6379/0
-    restart: unless-stopped
-    networks:
-      - reev-network
+      AUTO_ACMG_API_ANNONARS_URL: "http://annonars:8080"
+      AUTO_ACMG_API_MEHARI_URL: "http://mehari:8080"
+      AUTO_ACMG_API_DOTTY_URL: "http://dotty:8080"
+      AUTO_ACMG_SEQREPO_DATA_DIR: "/home/auto-acmg/seqrepo/master"
+    volumes:
+      - type: bind
+        source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data/download/dotty/2024-12-20
+        target: /home/auto-acmg/seqrepo/master
+        read_only: true
     depends_on:
       - annonars
+      - dotty
       - mehari
-      - postgres
-      - redis
 
-volumes:
-  postgres-data:
-    driver: local
-  redis-data:
-    driver: local
+  # -- cada-prio -------------------------------------------------------------
+  cada-prio:
+    <<: *service_internal
+    container_name: reev-cada-prio
+    hostname: cada-prio
+    image: "ghcr.io/bihealth/cada-prio:main"
+    environment:
+      CADA_PATH_DATA: /data/cada-prio/model/model
+
+  # -- PostgreSQL ------------------------------------------------------------
+  postgres:
+    <<: *service_default
+    container_name: reev-postgres
+    hostname: postgres
+    image: postgres:12
+    secrets:
+      - db-password
+    environment:
+      POSTGRES_USER: reev
+      POSTGRES_DB: reev
+      POSTGRES_PASSWORD_FILE: /run/secrets/db-password
+    volumes:
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/postgres/data
+        target: /var/lib/postgresql/data
+
+  # -- Redis -----------------------------------------------------------------
+  redis:
+    <<: *service_default
+    container_name: reev-redis
+    hostname: redis
+    image: redis:7
+    volumes:
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/redis/data
+        target: /data
+
+  # -- RabbitMQ --------------------------------------------------------------
+  rabbitmq:
+    <<: *service_default
+    container_name: reev-rabbitmq
+    hostname: rabbitmq
+    image: rabbitmq:3
+    volumes:
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/rabbitmq/data
+        target: /var/lib/rabbitmq
+
+  # -- REEV DB Monitor -------------------------------------------------------
+  reev-monitor:
+    <<: *service_default
+    container_name: reev-monitor
+    hostname: reev-monitor
+    build:
+      context: /home/arkantu/workspace/reev/monitor
+      dockerfile: Dockerfile
+    image: reev-monitor:latest
+    ports:
+      - "8300:8300"
+    environment:
+      DATA_DIR: /nas/data
+      LOG_FILE: /nas/download-smart.log
+      NAS_HOST: "192.168.0.193"
+      NAS_SCRIPT: /mnt/swarm-storage/reev-data/download-smart.sh
+      NAS_LOG: /mnt/swarm-storage/reev-data/download-smart.log
+      SSH_KEY: /root/.ssh/id_ed25519
+    volumes:
+      # NAS data — read-only (sshfs mount propagated from host)
+      - type: bind
+        source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data
+        target: /nas/data
+        read_only: true
+      # Download log — rw para que el monitor pueda escribir entradas propias
+      - type: bind
+        source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/download-smart.log
+        target: /nas/download-smart.log
+      # SSH key to trigger NAS update script
+      - type: bind
+        source: /home/arkantu/.ssh/id_ed25519
+        target: /root/.ssh/id_ed25519
+        read_only: true
+
+  # -- pgAdmin ---------------------------------------------------------------
+  pgadmin:
+    <<: *service_default
+    container_name: reev-pgadmin
+    hostname: pgadmin
+    image: dpage/pgadmin4:latest
+    secrets:
+      - db-password
+      - pgadmin-password
+    depends_on:
+      - postgres
+    volumes:
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/pgadmin/data
+        target: /var/lib/pgadmin
+      - type: bind
+        source: /home/arkantu/workspace/reev/config/pgadmin/servers.json
+        target: /pgadmin4/servers.json
+
+  # -- Flower (celery monitor) -----------------------------------------------
+  flower:
+    <<: *service_default
+    container_name: reev-flower
+    hostname: flower
+    image: mher/flower:latest
+    depends_on:
+      - rabbitmq
+    command:
+      - "celery"
+      - "--broker=amqp://guest@rabbitmq:5672//"
+      - "flower"
+
+# == Secrets =================================================================
+
+secrets:
+  db-password:
+    file: /home/arkantu/workspace/reev/secrets/db-password
+  pgadmin-password:
+    file: /home/arkantu/workspace/reev/secrets/pgadmin-password
+
+# == Networks ================================================================
 
 networks:
-  reev-network:
+  reev:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-reev
