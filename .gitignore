@@ -1,6 +1,8 @@
 .env
 secrets/
-volumes/
+volumes/*
+!volumes/reev-ui-patches/
+!volumes/reev-backend-patches/
 __pycache__/
 *.log
 wget-log

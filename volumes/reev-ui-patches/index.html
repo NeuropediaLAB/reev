@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="anonymous">
+    <link rel="preload" as="style" onload="this.rel='stylesheet'" href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400;500;700;900&display=swap">
+    <link rel="preload" as="font" type="font/woff2" href="/assets/materialdesignicons-webfont-jMagRUXp.woff2" crossorigin="anonymous">
+    <link rel="preload" as="font" type="font/woff" href="/assets/materialdesignicons-webfont-RGYQqzrL.woff" crossorigin="anonymous">
+
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading REEV...</title>
+
+    <!-- Matomo -->
+    <script>
+      var _paq = window._paq = window._paq || [];
+      /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+      _paq.push(['trackPageView']);
+      _paq.push(['enableLinkTracking']);
+      (function() {
+        var u="https://matomo.charite.de/";
+        _paq.push(['setTrackerUrl', u+'matomo.php']);
+        _paq.push(['setSiteId', '136']);
+        var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+        g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+      })();
+    </script>
+    <!-- End Matomo Code -->
+    <script type="module" crossorigin src="/assets/index-jMqp1mrs.js"></script>
+    <script>
+      /* Cards colapsables (parche UI REEV). Por defecto contrae las tarjetas largas
+         (Literature/Bibliografía y cualquier cuerpo > 1200px) para reducir scrolling.
+         El estado se recuerda en sessionStorage por título de tarjeta. */
+      (function () {
+        var KEY = "reevCardOpen", TITLE_RE = /^(literature|bibliograf|literatura)/i, TALL = 1200;
+        var open = [];
+        try { open = JSON.parse(sessionStorage.getItem(KEY) || "[]") || []; } catch (e) { open = []; }
+        var isOpen = function (t) { return open.indexOf(t) !== -1; };
+        var setOpen = function (t, v) {
+          var i = open.indexOf(t);
+          if (v && i < 0) open.push(t); else if (!v && i > -1) open.splice(i, 1);
+          try { sessionStorage.setItem(KEY, JSON.stringify(open)); } catch (e) {}
+        };
+        var style = document.createElement("style");
+        style.textContent =
+          ".reev-collapsed>.v-card-text{display:none}" +
+          ".reev-collapse-btn{margin-left:8px;font-size:12px;line-height:1.4;text-transform:none;" +
+          "letter-spacing:normal;vertical-align:middle;opacity:.65;cursor:pointer;background:none;" +
+          "border:0;padding:0;color:inherit;text-decoration:underline;font-family:inherit}" +
+          ".reev-collapse-btn:hover{opacity:1}";
+        document.head.appendChild(style);
+
+        function titleOf(card) {
+          var t = card.querySelector(":scope > .v-card-title");
+          return t ? t.textContent.trim().replace(/\s+/g, " ") : "";
+        }
+        function bodiesOf(card) {
+          return Array.prototype.filter.call(card.children, function (k) {
+            return k.classList && k.classList.contains("v-card-text");
+          });
+        }
+        function paint(card, title, collapsed, btn) {
+          card.classList.toggle("reev-collapsed", collapsed);
+          btn.textContent = collapsed ? "\u25be Mostrar" : "\u25b4 Ocultar";
+          btn.title = collapsed ? "Desplegar tarjeta" : "Contraer tarjeta";
+        }
+        function setup(card) {
+          var title = titleOf(card);
+          if (!title) return;
+          var body = bodiesOf(card);
+          if (!body.length) return;
+          var tall = body.some(function (b) { return b.scrollHeight > TALL; });
+          if (!TITLE_RE.test(title) && !tall) return;
+
+          var titleEl = card.querySelector(":scope > .v-card-title");
+          var btn = card.__reevBtn;
+          if (!btn || !btn.isConnected) {
+            btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "reev-collapse-btn";
+            btn.addEventListener("click", function (ev) {
+              ev.preventDefault(); ev.stopPropagation();
+              var nowOpen = card.classList.contains("reev-collapsed");
+              setOpen(title, nowOpen);
+              paint(card, title, !nowOpen, btn);
+            });
+            card.__reevBtn = btn;
+            titleEl.appendChild(btn);
+          }
+          paint(card, title, !isOpen(title), btn);
+        }
+        var pending = false;
+        function scan() {
+          pending = false;
+          var cards = document.querySelectorAll(".v-card");
+          for (var i = 0; i < cards.length; i++) setup(cards[i]);
+        }
+        function schedule() {
+          if (pending) return;
+          pending = true;
+          requestAnimationFrame(scan);
+        }
+        function boot() {
+          new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+          scan();
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", boot);
+        } else {
+          boot();
+        }
+      })();
+    </script>
+    
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
