@@ -55,6 +55,10 @@ COPY backend/Pipfile .
 COPY backend/Pipfile.lock .
 RUN PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy
 
+# NeuropediaLAB: passlib imports pkg_resources, which modern pip no longer
+# installs into a fresh venv -> backend crashes on import without this.
+RUN /.venv/bin/pip install --no-cache-dir "setuptools<80"
+
 RUN wget https://github.com/eficode/wait-for/releases/download/v2.2.4/wait-for -O /usr/local/bin/wait-for
 
 # ---------------------------------------------------------------------------
