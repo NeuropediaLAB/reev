@@ -1,5 +1,9 @@
 ---
 # REEV v0.6.0 — Khazad-dum deployment (no traefik, NPM handles SSL)
+#
+# Backend/celery run the locally built image `neuropedialab/reev:0.6.0-neuropedia2`,
+# built from NeuropediaLAB/reev@neuropedia. UI and backend patches are now part of
+# that source tree, so no patch files are bind-mounted any more.
 # Data on NAS via sshfs: /mnt/reev-data/ (= .193 /mnt/raid-ssd-pi-nas/reev)
 
 version: "3.9"
@@ -61,7 +65,7 @@ services:
     <<: *service_reev_default
     container_name: reev-backend
     hostname: reev-backend
-    image: "ghcr.io/bihealth/reev:0.6.0"
+    image: "neuropedialab/reev:0.6.0-neuropedia2"
     ports:
       - "8200:8080"
     environment:
@@ -71,54 +75,13 @@ services:
       SERVE_FRONTEND: /home/reev/ui
       FIRST_SUPERUSER_EMAIL: "arkantu@gmail.com"
       FIRST_SUPERUSER_PASSWORD: "akelarre"
-    volumes:
-      # Patches: (1) null-check for ucsc_conservation GRCh37, (2) clinvar records wrapper,
-      #          (3) dotty SPDI response format, (4) pubtator3 abstract null-check
-      - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/index-jMqp1mrs.js
-        target: /home/reev/ui/assets/index-jMqp1mrs.js
-        read_only: true
-      - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/index.html
-        target: /home/reev/ui/index.html
-        read_only: true
-      # Backend patch: raise httpx proxy timeout (120s) for NAS-backed services
-      - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-backend-patches/proxy.py
-        target: /home/reev/app/api/internal/endpoints/proxy.py
-        read_only: true
-      # Backend patch: WinterVar non-JSON response → default ACMG rating instead of 500
-      - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-backend-patches/remote.py
-        target: /home/reev/app/api/internal/endpoints/remote.py
-        read_only: true
-      # UI patch: GeneLiteratureCard optional-chain on abstract.pmid/journal/date/passages
-      - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/GeneLiteratureCard-Av9mbsqx.js
-        target: /home/reev/ui/assets/GeneLiteratureCard-Av9mbsqx.js
-        read_only: true
-      # Backend patch: session cookie without `Secure` so login works over plain HTTP
-      - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-backend-patches/auth.py
-        target: /home/reev/app/core/auth.py
-        read_only: true
-      # UI patch: SeqvarScoresCard CADD fallback for SIFT, PolyPhen2 HVAR, Gerp++ when dbNSFP missing (GRCh37)
-      - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/SeqvarScoresCard-QuWJsaiW.js
-        target: /home/reev/ui/assets/SeqvarScoresCard-QuWJsaiW.js
-        read_only: true
-      # UI patch: StrucvarClinsigCard - add auto-acmg strucvar ACMG criteria display (auto-acmg SV endpoint)
-      - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/StrucvarClinsigCard-dT0IsBqR.js
-        target: /home/reev/ui/assets/StrucvarClinsigCard-dT0IsBqR.js
-        read_only: true
 
   # -- REEV celery worker ----------------------------------------------------
   reev-celery-worker:
     <<: *service_reev_default
     container_name: reev-celery-worker
     hostname: reev-celery-worker
-    image: "ghcr.io/bihealth/reev:0.6.0"
+    image: "neuropedialab/reev:0.6.0-neuropedia2"
     environment:
       POSTGRES_PASSWORD: "reev-db-jPc1Fk3XoUXurUmz4R8arA"
       POSTGRES_HOST: postgres
@@ -130,7 +93,7 @@ services:
     <<: *service_reev_default
     container_name: reev-celery-beat
     hostname: reev-celery-beat
-    image: "ghcr.io/bihealth/reev:0.6.0"
+    image: "neuropedialab/reev:0.6.0-neuropedia2"
     environment:
       POSTGRES_PASSWORD: "reev-db-jPc1Fk3XoUXurUmz4R8arA"
       POSTGRES_HOST: postgres
