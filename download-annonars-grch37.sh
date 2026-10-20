@@ -2,8 +2,8 @@
 set -euo pipefail
 
 S3_BASE="https://ceph-s3-public.cubi.bihealth.org/varfish-public/full"
-TARGET_BASE="/mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data/download/annonars"
-ANNONARS_DIR="/mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data/annonars/grch37"
+TARGET_BASE="/mnt/reev-data/volumes/reev-static/data/download/annonars"
+ANNONARS_DIR="/mnt/reev-data/volumes/reev-static/data/annonars/grch37"
 
 download_db() {
     local db_name="$1"
@@ -38,7 +38,9 @@ for k in root.findall('s3:Contents', ns):
         local filename=$(basename "$relpath")
         mkdir -p "$destdir"
         
-        if [ -f "${db_path}/${relpath}" ]; then
+        # Skip only if the file is complete: an existing .aria2 control file
+        # means a previous run was interrupted mid-download.
+        if [ -f "${db_path}/${relpath}" ] && [ ! -f "${db_path}/${relpath}.aria2" ]; then
             echo "  SKIP (exists): ${relpath}"
             continue
         fi
@@ -98,7 +100,7 @@ fi
 echo ""
 echo "=== Restarting reev-annonars ==="
 cd /home/arkantu/workspace/reev
-docker compose restart reev-annonars
+docker compose restart annonars
 
 echo ""
 echo "=== All done! ==="

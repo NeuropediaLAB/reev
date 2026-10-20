@@ -8,3 +8,6 @@ __pycache__/
 wget-log
 *.pyc
 .reev_manager.lock
+
+# Backups de bundles minificados (el historial de git ya los conserva)
+volumes/reev-ui-patches/*.bak
