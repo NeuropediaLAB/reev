@@ -1,0 +1,9 @@
+# Overlay image: stock NeuropediaLAB/reev 0.6.0 plus the case-archive feature
+# (backend/app/casearchive, Alembic migration b3f1a7c92d10).  Building from the
+# released image keeps the already-baked /home/reev/ui frontend untouched while
+# refreshing the Python package with the source tree at /home/arkantu/workspace/reev-src.
+FROM neuropedialab/reev:0.6.0-neuropedia2
+
+COPY backend/ /home/reev/
+
+WORKDIR /home/reev
