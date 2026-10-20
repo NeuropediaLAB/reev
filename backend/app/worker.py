@@ -9,6 +9,10 @@ from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.db.session import json_serializer
 
+# Register the periodic tasks of the case archive (must be imported by the
+# worker so that the beat schedule and the task names exist).
+from app.casearchive import tasks as _casearchive_tasks  # noqa: F401,E402
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

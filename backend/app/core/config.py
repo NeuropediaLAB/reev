@@ -205,6 +205,14 @@ class Settings(BaseSettings):
     #: Sentry DSN
     SENTRY_DSN: HttpUrl | None = None
 
+    # -- Case Archive (followed variants, ACMG history, re-analysis) ---------
+
+    #: Enable the periodic polling of reference data versions and re-analysis
+    CASEARCHIVE_REANALYSIS_ENABLED: bool = True
+
+    #: Day of week for the weekly re-analysis (0 = Monday)
+    CASEARCHIVE_REANALYSIS_WEEKDAY: int = 6
+
     @field_validator("SENTRY_DSN", mode="before")
     def sentry_dsn_can_be_blank(cls, v: str | None) -> str | None:  # pragma: no cover
         if not v:

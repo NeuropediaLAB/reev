@@ -9,6 +9,7 @@ from app.api.api_v1.endpoints import (
     adminmsgs,
     auth,
     bookmarks,
+    casearchive,
     caseinfo,
     clinvarsub,
     utils,
@@ -23,6 +24,9 @@ api_router.include_router(adminmsgs.router, prefix="/adminmsgs", tags=["adminmsg
 api_router.include_router(bookmarks.router, prefix="/bookmarks", tags=["bookmarks"])
 api_router.include_router(utils.router, prefix="/utils", tags=["utils"])
 api_router.include_router(caseinfo.router, prefix="/caseinfo", tags=["caseinfo"])
+api_router.include_router(
+    casearchive.router, prefix="/casearchive", tags=["casearchive"]
+)
 api_router.include_router(clinvarsub.router, prefix="/clinvarsub", tags=["clinvarsub"])
 
 api_router.include_router(
