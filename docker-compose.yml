@@ -1,6 +1,6 @@
 ---
 # REEV v0.6.0 — Khazad-dum deployment (no traefik, NPM handles SSL)
-# Data on NAS via sshfs: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/
+# Data on NAS via sshfs: /mnt/reev-data/ (= .193 /mnt/raid-ssd-pi-nas/reev)
 
 version: "3.9"
 
@@ -18,9 +18,8 @@ x-service-internal: &service_internal
   <<: *service_default
   volumes:
     - type: bind
-      source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data
+      source: /mnt/reev-data/volumes/reev-static/data
       target: /data
-      read_only: true
 
 x-service-reev-default: &service_reev_default
   <<: *service_default
@@ -51,11 +50,10 @@ services:
     image: nginx:1
     volumes:
       - type: bind
-        source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data
+        source: /mnt/reev-data/volumes/reev-static/data
         target: /data
-        read_only: true
       - type: bind
-        source: /home/arkantu/workspace/reev/config/nginx/nginx.conf
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/config/nginx/nginx.conf
         target: /etc/nginx/nginx.conf
 
   # -- REEV backend ----------------------------------------------------------
@@ -71,36 +69,48 @@ services:
       POSTGRES_PASSWORD: "reev-db-jPc1Fk3XoUXurUmz4R8arA"
       POSTGRES_HOST: postgres
       SERVE_FRONTEND: /home/reev/ui
+      FIRST_SUPERUSER_EMAIL: "arkantu@gmail.com"
+      FIRST_SUPERUSER_PASSWORD: "akelarre"
     volumes:
       # Patches: (1) null-check for ucsc_conservation GRCh37, (2) clinvar records wrapper,
       #          (3) dotty SPDI response format, (4) pubtator3 abstract null-check
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-ui-patches/index-jMqp1mrs.js
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/index-jMqp1mrs.js
         target: /home/reev/ui/assets/index-jMqp1mrs.js
         read_only: true
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-ui-patches/index.html
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/index.html
         target: /home/reev/ui/index.html
         read_only: true
       # Backend patch: raise httpx proxy timeout (120s) for NAS-backed services
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-backend-patches/proxy.py
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-backend-patches/proxy.py
         target: /home/reev/app/api/internal/endpoints/proxy.py
         read_only: true
       # Backend patch: WinterVar non-JSON response → default ACMG rating instead of 500
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-backend-patches/remote.py
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-backend-patches/remote.py
         target: /home/reev/app/api/internal/endpoints/remote.py
         read_only: true
       # UI patch: GeneLiteratureCard optional-chain on abstract.pmid/journal/date/passages
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-ui-patches/GeneLiteratureCard-Av9mbsqx.js
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/GeneLiteratureCard-Av9mbsqx.js
         target: /home/reev/ui/assets/GeneLiteratureCard-Av9mbsqx.js
+        read_only: true
+      # Backend patch: session cookie without `Secure` so login works over plain HTTP
+      - type: bind
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-backend-patches/auth.py
+        target: /home/reev/app/core/auth.py
         read_only: true
       # UI patch: SeqvarScoresCard CADD fallback for SIFT, PolyPhen2 HVAR, Gerp++ when dbNSFP missing (GRCh37)
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-ui-patches/SeqvarScoresCard-QuWJsaiW.js
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/SeqvarScoresCard-QuWJsaiW.js
         target: /home/reev/ui/assets/SeqvarScoresCard-QuWJsaiW.js
+        read_only: true
+      # UI patch: StrucvarClinsigCard - add auto-acmg strucvar ACMG criteria display (auto-acmg SV endpoint)
+      - type: bind
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/reev-ui-patches/StrucvarClinsigCard-dT0IsBqR.js
+        target: /home/reev/ui/assets/StrucvarClinsigCard-dT0IsBqR.js
         read_only: true
 
   # -- REEV celery worker ----------------------------------------------------
@@ -135,6 +145,10 @@ services:
     image: "ghcr.io/bihealth/dotty:0.2.1"
     environment:
       DATA_DIR: /data/dotty
+    volumes:
+      - type: bind
+        source: /mnt/reev-data/volumes/reev-static/data/download/dotty/2024-12-20
+        target: /data/dotty
 
   # -- Mehari ----------------------------------------------------------------
   mehari:
@@ -144,6 +158,11 @@ services:
     image: "ghcr.io/varfish-org/mehari:0.25.3"
     environment:
       PATH_DB: /data/mehari
+    volumes:
+      - type: bind
+        source: /mnt/reev-data/volumes/reev-static/data/mehari
+        target: /data/mehari
+        read_only: true
 
   # -- Viguno ----------------------------------------------------------------
   viguno:
@@ -164,25 +183,25 @@ services:
         hard: 1048576
 
   # -- Auto-ACMG ------------------------------------------------------------
-  auto-acmg:
-    <<: *service_default
-    container_name: reev-auto-acmg
-    hostname: auto-acmg
-    image: "ghcr.io/bihealth/auto-acmg:main"
-    environment:
-      AUTO_ACMG_API_ANNONARS_URL: "http://annonars:8080"
-      AUTO_ACMG_API_MEHARI_URL: "http://mehari:8080"
-      AUTO_ACMG_API_DOTTY_URL: "http://dotty:8080"
-      AUTO_ACMG_SEQREPO_DATA_DIR: "/home/auto-acmg/seqrepo/master"
-    volumes:
-      - type: bind
-        source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data/download/dotty/2024-12-20
-        target: /home/auto-acmg/seqrepo/master
-        read_only: true
-    depends_on:
-      - annonars
-      - dotty
-      - mehari
+#   auto-acmg:
+#     <<: *service_default
+#     container_name: reev-auto-acmg
+#     hostname: auto-acmg
+#     image: "ghcr.io/bihealth/auto-acmg:main"
+#     environment:
+#       AUTO_ACMG_API_ANNONARS_URL: "http://annonars:8080"
+#       AUTO_ACMG_API_MEHARI_URL: "http://mehari:8080"
+#       AUTO_ACMG_API_DOTTY_URL: "http://dotty:8080"
+#       AUTO_ACMG_SEQREPO_DATA_DIR: "/home/auto-acmg/seqrepo/master"
+#     volumes:
+#       - type: bind
+#         source: /mnt/reev-data/volumes/reev-static/data/download/dotty/2024-12-20
+#         target: /home/auto-acmg/seqrepo/master
+#         read_only: true
+#     depends_on:
+#       - annonars
+#       - dotty
+#       - mehari
 
   # -- cada-prio -------------------------------------------------------------
   cada-prio:
@@ -207,7 +226,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/db-password
     volumes:
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/postgres/data
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/postgres/data
         target: /var/lib/postgresql/data
 
   # -- Redis -----------------------------------------------------------------
@@ -218,7 +237,7 @@ services:
     image: redis:7
     volumes:
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/redis/data
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/redis/data
         target: /data
 
   # -- RabbitMQ --------------------------------------------------------------
@@ -229,7 +248,7 @@ services:
     image: rabbitmq:3
     volumes:
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/rabbitmq/data
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/rabbitmq/data
         target: /var/lib/rabbitmq
 
   # -- REEV DB Monitor -------------------------------------------------------
@@ -238,7 +257,7 @@ services:
     container_name: reev-monitor
     hostname: reev-monitor
     build:
-      context: /home/arkantu/workspace/reev/monitor
+      context: /home/arkantu/workspace/docker/genomic-stack/reev/monitor
       dockerfile: Dockerfile
     image: reev-monitor:latest
     ports:
@@ -253,12 +272,11 @@ services:
     volumes:
       # NAS data — read-only (sshfs mount propagated from host)
       - type: bind
-        source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/reev-static/data
+        source: /mnt/reev-data/volumes/reev-static/data
         target: /nas/data
-        read_only: true
       # Download log — rw para que el monitor pueda escribir entradas propias
       - type: bind
-        source: /mnt/pi-nas/raid-hdd/swarm-storage/reev-data/download-smart.log
+        source: /mnt/reev-data/download-smart.log
         target: /nas/download-smart.log
       # SSH key to trigger NAS update script
       - type: bind
@@ -279,11 +297,75 @@ services:
       - postgres
     volumes:
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/pgadmin/data
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/pgadmin/data
         target: /var/lib/pgadmin
       - type: bind
-        source: /home/arkantu/workspace/reev/config/pgadmin/servers.json
+        source: /home/arkantu/workspace/docker/genomic-stack/reev/config/pgadmin/servers.json
         target: /pgadmin4/servers.json
+
+  # -- JBrowse 2 genome browser -----------------------------------------------
+  jbrowse2:
+    <<: *service_default
+    container_name: reev-jbrowse2
+    hostname: jbrowse2
+    image: "reev-jbrowse2:latest"
+    ports:
+      - "3006:80"
+    volumes:
+      # La imagen trae el build de JBrowse 2 pero su index.html se sobrescribio
+      # con el de bienvenida de nginx; se monta el correcto desde el host.
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-jbrowse2/index.html
+        target: /usr/share/nginx/html/index.html
+        read_only: true
+      # Config JBrowse: ensamblados hg19/hg38 (2bit remoto de UCSC, con CORS)
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-jbrowse2/config.json
+        target: /usr/share/nginx/html/config.json
+        read_only: true
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-jbrowse2/hg19.2bit
+        target: /usr/share/nginx/html/hg19.2bit
+        read_only: true
+      - type: bind
+        source: /home/arkantu/workspace/reev/volumes/reev-jbrowse2/hg38.2bit
+        target: /usr/share/nginx/html/hg38.2bit
+        read_only: true
+
+  # -- Exome Coverage Advisor API -------------------------------------------
+#   exome-advisor-api:
+#     <<: *service_default
+#     container_name: exome-advisor-api
+#     hostname: exome-advisor-api
+#     build:
+#       context: /home/arkantu/workspace/docker/genomic-stack/medical/exome-coverage-advisor
+#       dockerfile: Dockerfile.api
+#     image: exome-advisor-api:latest
+#     environment:
+#       PYTHONUNBUFFERED: "1"
+#     healthcheck:
+#       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 3
+#       start_period: 20s
+#
+#   # -- Exome Coverage Advisor Frontend (Streamlit) ---------------------------
+#   exome-advisor-frontend:
+#     <<: *service_default
+#     container_name: exome-advisor-frontend
+#     hostname: exome-advisor-frontend
+#     build:
+#       context: /home/arkantu/workspace/docker/genomic-stack/medical/exome-coverage-advisor
+#       dockerfile: Dockerfile.frontend
+#     image: exome-advisor-frontend:latest
+#     ports:
+#       - "8401:8501"
+#     environment:
+#       API_URL: "http://exome-advisor-api:8000"
+#     depends_on:
+#       exome-advisor-api:
+#         condition: service_healthy
 
   # -- Flower (celery monitor) -----------------------------------------------
   flower:
@@ -302,9 +384,9 @@ services:
 
 secrets:
   db-password:
-    file: /home/arkantu/workspace/reev/secrets/db-password
+    file: /home/arkantu/workspace/docker/genomic-stack/reev/secrets/db-password
   pgadmin-password:
-    file: /home/arkantu/workspace/reev/secrets/pgadmin-password
+    file: /home/arkantu/workspace/docker/genomic-stack/reev/secrets/pgadmin-password
 
 # == Networks ================================================================
 

@@ -25,20 +25,70 @@ SSH_KEY    = os.environ.get("SSH_KEY",    "/root/.ssh/id_ed25519")
 
 # ── Database groups to monitor ─────────────────────────────────────────────────
 DB_GROUPS = [
-    {"id": "annonars-grch38", "label": "Annonars GRCh38",   "icon": "🧬", "path": DATA_DIR / "annonars/grch38"},
-    {"id": "annonars-grch37", "label": "Annonars GRCh37",   "icon": "🧬", "path": DATA_DIR / "annonars/grch37",
-     # Show download progress for these DBs inline while they're not yet symlinked
-     "pending_downloads": [
-         DATA_DIR / "download/annonars/dbnsfp-grch37-4.5a+0.39.0",
-         DATA_DIR / "download/annonars/dbscsnv-grch37-1.1+0.39.0",
-     ]},
-    {"id": "annonars-genes",  "label": "Annonars Genes",    "icon": "🔗", "path": DATA_DIR / "annonars",
-     "entries_filter": ["genes", "clinvar-genes"]},
-    {"id": "mehari-grch38",   "label": "Mehari GRCh38",     "icon": "🔬", "path": DATA_DIR / "mehari/grch38"},
-    {"id": "mehari-grch37",   "label": "Mehari GRCh37",     "icon": "🔬", "path": DATA_DIR / "mehari/grch37"},
-    {"id": "dotty",           "label": "Dotty / SeqRepo",   "icon": "📍", "path": DATA_DIR / "dotty"},
-    {"id": "viguno",          "label": "Viguno / HPO",      "icon": "🏥", "path": DATA_DIR / "viguno"},
-    {"id": "cada-prio",       "label": "CADA-Prio Model",   "icon": "🤖", "path": DATA_DIR / "cada-prio"},
+    {
+        "id": "annonars-grch38", "label": "Annonars GRCh38", "icon": "🧬",
+        "acronym": "ANNOtation of NucleotidE vaRiantS",
+        "path": DATA_DIR / "annonars/grch38",
+        "description": "Bases de datos de anotación de variantes para GRCh38 (hg38). Incluye frecuencias poblacionales (gnomAD v4), predicciones funcionales (CADD, dbNSFP, AlphaMissense), variantes clínicas (ClinVar), conservación evolutiva y variantes estructurales. Ensamblaje principal para NGS modernos.",
+        "pending_downloads": [
+            DATA_DIR / "download/annonars/gnomad-genomes-chrX-grch38-4.1+0.39.0",
+            DATA_DIR / "download/annonars/gnomad-genomes-chrY-grch38-4.1+0.39.0",
+        ],
+    },
+    {
+        "id": "annonars-grch37", "label": "Annonars GRCh37", "icon": "🧬",
+        "acronym": "ANNOtation of NucleotidE vaRiantS",
+        "path": DATA_DIR / "annonars/grch37",
+        "description": "Bases de datos de anotación de variantes para GRCh37 (hg19). Versión heredada ampliamente usada en estudios publicados y pipelines clínicas. Mismas categorías que GRCh38 con datos adaptados al ensamblaje antiguo.",
+        "pending_downloads": [
+            DATA_DIR / "download/annonars/dbnsfp-grch37-4.5a+0.39.0",
+            DATA_DIR / "download/annonars/dbscsnv-grch37-1.1+0.39.0",
+            DATA_DIR / "download/annonars/alphamissense-grch37-1+0.39.0",
+            DATA_DIR / "download/annonars/functional-grch37-105.20201022+0.39.0",
+            DATA_DIR / "download/annonars/gnomad-sv-exomes-grch37-0.3.1+0.39.0",
+            DATA_DIR / "download/annonars/gnomad-sv-genomes-grch37-2.1.1+0.39.0",
+            DATA_DIR / "download/annonars/regions-grch37-20240711+0.39.0",
+            DATA_DIR / "download/annonars/gnomad-exomes-chrX-grch37-2.1.1",
+            DATA_DIR / "download/annonars/gnomad-genomes-chrX-grch37-2.1.1",
+        ],
+    },
+    {
+        "id": "annonars-genes", "label": "Annonars Genes", "icon": "🔗",
+        "acronym": "ANNOtation of NucleotidE vaRiantS",
+        "path": DATA_DIR / "annonars",
+        "description": "Bases de datos génicas independientes del ensamblaje: anotaciones HGNC, scores de haploinsuficiencia, constraint gnomAD (pLI, LOEUF, Z-score missense) y resumen ClinVar por gen. Compartidas entre GRCh37 y GRCh38.",
+        "entries_filter": ["genes", "clinvar-genes"],
+    },
+    {
+        "id": "mehari-grch38", "label": "Mehari GRCh38", "icon": "🔬",
+        "acronym": "Molecular Effect and HGVS Annotation Resource Infrastructure",
+        "path": DATA_DIR / "mehari/grch38",
+        "description": "Transcriptos RefSeq y Ensembl con coordenadas GRCh38 para el motor Mehari. Necesarios para calcular el efecto HGVS de cada variante (missense, frameshift, splicing, UTR, etc.).",
+    },
+    {
+        "id": "mehari-grch37", "label": "Mehari GRCh37", "icon": "🔬",
+        "acronym": "Molecular Effect and HGVS Annotation Resource Infrastructure",
+        "path": DATA_DIR / "mehari/grch37",
+        "description": "Transcriptos RefSeq y Ensembl con coordenadas GRCh37 para el motor Mehari. Equivalente al anterior pero para el ensamblaje hg19.",
+    },
+    {
+        "id": "dotty", "label": "Dotty / SeqRepo", "icon": "📍",
+        "acronym": "DNA/RNA cOordinate Translation and Transcript bYpass",
+        "path": DATA_DIR / "dotty",
+        "description": "Repositorio de secuencias SeqRepo utilizado por Dotty para conversión y validación de descripciones HGVS. Permite resolver transcriptos por ID RefSeq/Ensembl y verificar la corrección de variantes HGVS.",
+    },
+    {
+        "id": "viguno", "label": "Viguno / HPO", "icon": "🏥",
+        "acronym": "Variant Interpretation with Gene and UNified Ontology",
+        "path": DATA_DIR / "viguno",
+        "description": "Human Phenotype Ontology (HPO) y sus asociaciones gen-fenotipo. Utilizada por CADA-Prio para priorizar variantes candidatas según el fenotipo clínico del paciente.",
+    },
+    {
+        "id": "cada-prio", "label": "CADA-Prio Model", "icon": "🤖",
+        "acronym": "Case Annotation and Deep learning-based Automated Prioritization",
+        "path": DATA_DIR / "cada-prio",
+        "description": "Modelo de machine learning para priorización de variantes candidatas en enfermedades raras. Integra el fenotipo HPO del paciente con datos de variantes para generar una puntuación de relevancia clínica.",
+    },
 ]
 
 # ── State ──────────────────────────────────────────────────────────────────────
@@ -55,18 +105,41 @@ def _human_size(num_bytes: int) -> str:
 
 
 def _rocksdb_progress(path: Path) -> dict:
-    """Return download progress for a directory expected to contain a rocksdb/ subfolder."""
+    """Return download progress for a directory expected to contain RocksDB files.
+    Handles two layouts:
+      - path/rocksdb/*.sst  (nested layout, rocksdb/ has content)
+      - path/*.sst          (flat layout, sst files at root)
+    """
     rocksdb_dir = path / "rocksdb"
-    if not rocksdb_dir.exists():
+    if rocksdb_dir.exists():
+        sst_files = list(rocksdb_dir.glob("*.sst"))
+        if sst_files:
+            # Nested layout with content
+            pass
+        else:
+            # rocksdb/ dir exists but is empty → fall back to root (flat layout)
+            rocksdb_dir = path
+            sst_files = list(rocksdb_dir.glob("*.sst"))
+    else:
+        rocksdb_dir = path
+        sst_files = list(rocksdb_dir.glob("*.sst"))
+
+    if not sst_files and not (rocksdb_dir / "CURRENT").exists():
         return {"sst_done": 0, "sst_total": 0, "has_current": False, "pct": 0}
 
-    sst_files = list(rocksdb_dir.glob("*.sst"))
     has_current = (rocksdb_dir / "CURRENT").exists()
 
-    # aria2c creates .aria2 control files while downloading; their absence = file complete
-    done = sum(1 for f in sst_files if not (rocksdb_dir / (f.name + ".aria2")).exists() and f.stat().st_size > 0)
+    done = sum(
+        1 for f in sst_files
+        if not (rocksdb_dir / (f.name + ".aria2")).exists() and f.stat().st_size > 0
+    )
     total = len(sst_files)
-    pct = int(done / total * 100) if total else 0
+
+    # If CURRENT exists, the rocksdb was cleanly closed → all files are complete
+    if has_current:
+        done = total
+
+    pct = int(done / total * 100) if total else (100 if has_current else 0)
     return {"sst_done": done, "sst_total": total, "has_current": has_current, "pct": pct}
 
 
@@ -140,8 +213,10 @@ def _entry_info(path: Path, is_download: bool = False) -> dict:
             pass
     else:
         # Also check for RocksDB-style completion in any sub-path
+        # Supports both nested layout (rocksdb/CURRENT) and flat layout (CURRENT at root)
         rocksdb_current = actual / "rocksdb" / "CURRENT"
-        if rocksdb_current.exists():
+        flat_current = actual / "CURRENT"
+        if rocksdb_current.exists() or flat_current.exists():
             info["has_done"] = True
             info["status"] = "done"
         else:
@@ -174,6 +249,8 @@ def get_status():
             "id":           grp["id"],
             "label":        grp["label"],
             "icon":         grp["icon"],
+            "acronym":      grp.get("acronym", ""),
+            "description":  grp.get("description", ""),
             "path":         str(path),
             "exists":       path.exists(),
             "entries":      [],

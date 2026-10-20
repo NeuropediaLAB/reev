@@ -37,6 +37,25 @@
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen">
 
+<!-- TOOLTIP FLOTANTE DE GRUPO -->
+<div id="grp-tooltip"
+  class="fixed z-[9999] w-72 pointer-events-none opacity-0 transition-opacity duration-150"
+  style="top:0;left:0">
+  <div class="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl overflow-hidden">
+    <div id="grp-tt-header" class="px-4 py-3 bg-gray-750 border-b border-gray-700 flex items-center gap-3">
+      <span id="grp-tt-icon" class="text-2xl flex-shrink-0">🗄️</span>
+      <div>
+        <div id="grp-tt-label" class="font-bold text-white text-sm leading-tight"></div>
+        <div id="grp-tt-acronym" class="text-blue-400 text-[10px] italic mt-0.5 leading-snug"></div>
+        <div class="text-gray-500 text-[10px] uppercase tracking-widest mt-0.5">Grupo de bases de datos</div>
+      </div>
+    </div>
+    <div class="px-4 py-3 text-xs">
+      <p id="grp-tt-desc" class="text-gray-300 leading-relaxed"></p>
+    </div>
+  </div>
+</div>
+
 <!-- TOOLTIP FLOTANTE -->
 <div id="db-tooltip"
   class="fixed z-[9999] w-80 pointer-events-none opacity-0 transition-opacity duration-150"
@@ -195,8 +214,14 @@ let liveLogSource = null
 let updatePollTimer = null
 
 // ── Fetch helpers ──────────────────────────────────────────────────────────────
-async function apiFetch(url, opts = {}) {
-  const r = await fetch(url, opts)
+// Base path adapts automatically whether served at / or under a sub-path like /db-monitor/
+const API_BASE = (() => {
+  const p = window.location.pathname.replace(/\/[^/]*$/, '')  // strip trailing segment if not dir
+  return p.endsWith('/') ? p.slice(0, -1) : p
+})()
+
+async function apiFetch(path, opts = {}) {
+  const r = await fetch(API_BASE + path, opts)
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`)
   return r.json()
 }
@@ -387,11 +412,54 @@ function hideTooltip() {
   }, 80)
 }
 
+// ── Group tooltip logic ──────────────────────────────────────────────────────
+let grpTtHideTimer = null
+const grpTtEl = document.getElementById('grp-tooltip')
+
+function showGroupTooltip(groupId, x, y) {
+  const g = groups.find(g => g.id === groupId)
+  if (!g || !g.description) return
+  document.getElementById('grp-tt-icon').textContent    = g.icon || '🗄️'
+  document.getElementById('grp-tt-label').textContent   = g.label
+  document.getElementById('grp-tt-acronym').textContent = g.acronym || ''
+  document.getElementById('grp-tt-desc').textContent    = g.description
+  positionGrpTooltip(x, y)
+  clearTimeout(grpTtHideTimer)
+  grpTtEl.classList.remove('opacity-0')
+  grpTtEl.classList.add('opacity-100')
+}
+
+function positionGrpTooltip(x, y) {
+  const W = window.innerWidth, H = window.innerHeight
+  const TW = 288, TH = grpTtEl.offsetHeight || 140
+  const margin = 12
+  let left = x + margin
+  let top  = y + margin
+  if (left + TW > W - 8) left = x - TW - margin
+  if (top  + TH > H - 8) top  = y - TH - margin
+  if (left < 8) left = 8
+  if (top  < 8) top  = 8
+  grpTtEl.style.left = left + 'px'
+  grpTtEl.style.top  = top  + 'px'
+}
+
+function hideGroupTooltip() {
+  grpTtHideTimer = setTimeout(() => {
+    grpTtEl.classList.remove('opacity-100')
+    grpTtEl.classList.add('opacity-0')
+  }, 80)
+}
+
 function attachTooltipListeners() {
   document.querySelectorAll('tr[data-row-id]').forEach(tr => {
     tr.addEventListener('mouseenter', e => showTooltip(tr.dataset.rowId, e.clientX, e.clientY))
     tr.addEventListener('mousemove',  e => positionTooltip(e.clientX, e.clientY))
     tr.addEventListener('mouseleave', () => hideTooltip())
+  })
+  document.querySelectorAll('.grp-info-btn').forEach(btn => {
+    btn.addEventListener('mouseenter', e => showGroupTooltip(btn.dataset.groupId, e.clientX, e.clientY))
+    btn.addEventListener('mousemove',  e => positionGrpTooltip(e.clientX, e.clientY))
+    btn.addEventListener('mouseleave', () => hideGroupTooltip())
   })
 }
 
@@ -448,13 +516,46 @@ function renderGroups() {
       ? ''
       : `<button onclick="loadSize('${g.id}')" class="text-xs text-blue-400 hover:text-blue-300 transition px-2 py-0.5 rounded hover:bg-gray-800">⇥ tamaño</button>`
 
+    const infoBtn = ''
+
+    // Downloading entries (status = partial or incomplete with dl_progress)
+    const downloadingEntries = g.entries.filter(e => e.dl_progress && e.status !== 'done')
+    const dlBanner = downloadingEntries.length ? `
+      <div class="px-4 py-2.5 bg-blue-950/40 border-b border-blue-900/40">
+        <div class="text-[10px] text-blue-400 font-semibold uppercase tracking-widest mb-1.5">⬇ Descargando</div>
+        <div class="space-y-1.5">
+          ${downloadingEntries.map(e => {
+            const p = e.dl_progress
+            const pct = p.pct ?? 0
+            const barColor = p.has_current ? 'bg-green-500' : 'bg-blue-500'
+            const label = p.sst_total > 0
+              ? `${p.sst_done}/${p.sst_total} archivos · ${pct}%`
+              : (p.has_current ? '100% · completo' : 'iniciando…')
+            return `<div>
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-gray-300 text-xs font-medium">${e.name}</span>
+                <span class="text-gray-500 text-[10px] font-mono">${label}</span>
+              </div>
+              <div class="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div class="${barColor} h-full rounded-full transition-all duration-500" style="width:${pct || (p.has_current ? 100 : 2)}%"></div>
+              </div>
+            </div>`
+          }).join('')}
+        </div>
+      </div>` : ''
+
+    // Description banner (dead code – now shown via hover tooltip; kept for reference)
+    // const descBanner = ''
+
     return `
       <div class="bg-gray-900 rounded-xl border border-gray-800 fade-in flex flex-col">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 grp-info-btn cursor-default" data-group-id="${g.id}">
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-xl flex-shrink-0">${g.icon}</span>
             <div class="min-w-0">
-              <h3 class="font-semibold text-sm text-white truncate">${g.label}</h3>
+              <div class="flex items-center gap-1.5">
+                <h3 class="font-semibold text-sm text-white truncate">${g.label}</h3>
+              </div>
               <div class="flex items-center gap-2 mt-0.5">
                 ${statusBadge(g.status)}
                 ${totalSize}
@@ -466,11 +567,12 @@ function renderGroups() {
             <span class="text-xs text-gray-600">${g.last_update_iso ? `↻ ${g.last_update_iso}` : '—'}</span>
           </div>
         </div>
+        ${dlBanner}
         <div class="px-4 py-2 flex-1 overflow-x-auto">
-          ${g.entries.length ? `
+          ${g.entries.filter(e => !e.dl_progress || e.status === 'done').length ? `
           <table class="w-full text-xs">
             <tbody>${entries}</tbody>
-          </table>` : `<p class="text-gray-600 text-xs py-2">Sin entradas</p>`}
+          </table>` : `<p class="text-gray-600 text-xs py-2">Sin entradas instaladas</p>`}
         </div>
         ${g.error ? `<div class="px-4 pb-2 text-xs text-red-400">⚠ ${g.error}</div>` : ''}
       </div>`
@@ -617,7 +719,7 @@ function toggleLiveLog(enabled) {
     if (liveLogSource) return
     const pre = document.getElementById('log-content')
     pre.innerHTML = ''
-    liveLogSource = new EventSource('/api/log/stream')
+    liveLogSource = new EventSource(API_BASE + '/api/log/stream')
     dot.classList.remove('hidden')
     liveLogSource.onmessage = (ev) => {
       const line = JSON.parse(ev.data)
@@ -664,13 +766,18 @@ async function init() {
     const r = await apiFetch('/api/update/running')
     if (r.running) { setUpdateRunning(true); startUpdatePoll() }
   } catch(e) { /* ignore */ }
-  // Auto-refresh every 5 minutes normally; every 30s if a download group is partial
-  setInterval(async () => {
-    const hasActiveDownload = groups.some(g => g.id.startsWith('dl-') && g.status === 'partial')
-    await refresh()
-    if (!hasActiveDownload) return
-  }, 30_000)
-  setInterval(() => { if (!groups.some(g => g.id.startsWith('dl-') && g.status === 'partial')) refresh() }, 300_000)
+
+  // Auto-refresh: every 15s when downloads are active, every 5min otherwise
+  function scheduleRefresh() {
+    const hasActive = groups.some(g =>
+      g.entries.some(e => e.dl_progress && e.status !== 'done')
+    )
+    setTimeout(async () => {
+      await refresh()
+      scheduleRefresh()
+    }, hasActive ? 15_000 : 300_000)
+  }
+  scheduleRefresh()
 }
 
 init()
