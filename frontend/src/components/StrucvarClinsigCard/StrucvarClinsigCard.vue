@@ -10,8 +10,10 @@ import DocsLink from '@bihealth/reev-frontend-lib/components/DocsLink/DocsLink.v
 import type { Strucvar } from '@bihealth/reev-frontend-lib/lib/genomicVars'
 import { computed, onMounted, ref, watch } from 'vue'
 
+import { API_INTERNAL_BASE_PREFIX } from '@/api/common'
 import { useStrucvarAcmgRatingStore } from '@/stores/strucvarAcmgRating'
 
+import AutoAcmgChips from './AutoAcmgChips.vue'
 import CnGain from './CnGain.vue'
 import CnLoss from './CnLoss.vue'
 import SummarySheet from './SummarySheet.vue'
@@ -42,6 +44,36 @@ const acmgRatingStore = useStrucvarAcmgRatingStore()
 
 /** Component state: whether display of conflicting sections is enabled. */
 const showConflictingSections = ref<boolean>(false)
+
+/** Component state: server-side Auto-ACMG (SV) prediction for the current SV. */
+const autoAcmgResult = ref<AutoAcmgStrucvarResult | null>(null)
+
+/** Result of the server-side Auto-ACMG (SV) service. */
+interface AutoAcmgStrucvarResult {
+  prediction?: {
+    criteria?: Record<string, { prediction?: string }>
+  }
+}
+
+/** Fetch the server-side Auto-ACMG (SV) prediction for the given SV. */
+const fetchAutoAcmg = async (strucvar: Strucvar) => {
+  const params = new URLSearchParams({
+    sv_type: strucvar.svType,
+    chromosome: strucvar.chrom,
+    start: `${strucvar.start}`,
+    end: `${strucvar.stop}`,
+    genome_release: strucvar.genomeBuild || 'GRCh38'
+  })
+  try {
+    const response = await fetch(`${API_INTERNAL_BASE_PREFIX}remote/acmg-strucvar/?${params}`, {
+      method: 'GET'
+    })
+    autoAcmgResult.value = response.ok ? await response.json() : null
+  } catch (err) {
+    console.warn('failed to fetch Auto-ACMG (SV) prediction', err)
+    autoAcmgResult.value = null
+  }
+}
 
 /** Helper function to run a function in a try/catch and emit `errorDisplay` otherwise.. */
 const tryCatchEmitErrorDisplay = async (fn: () => Promise<void>) => {
@@ -84,9 +116,13 @@ watch(
   () => [props.strucvar],
   async () => {
     if (props.strucvar) {
-      await acmgRatingStore.fetchAcmgRating(props.strucvar)
+      await Promise.all([
+        acmgRatingStore.fetchAcmgRating(props.strucvar),
+        fetchAutoAcmg(props.strucvar)
+      ])
     } else {
       acmgRatingStore.clearData()
+      autoAcmgResult.value = null
     }
   }
 )
@@ -95,7 +131,9 @@ watch(
 onMounted(async () => {
   if (props.strucvar) {
     const strucvar = props.strucvar // so that it is not undefined
-    tryCatchEmitErrorDisplay(async () => acmgRatingStore.fetchAcmgRating(strucvar))
+    tryCatchEmitErrorDisplay(async () =>
+      Promise.all([acmgRatingStore.fetchAcmgRating(strucvar), fetchAutoAcmg(strucvar)])
+    )
   }
 })
 
@@ -138,6 +176,7 @@ const switchCriteria = (
       <a href="https://europepmc.org/article/MED/34615484" target="_blank"> (Fan et al., 2021) </a>
       which follows the ACMG 2020 criteria
       <a href="https://europepmc.org/article/MED/31690835" target="_blank">(Riggs et al., 2020)</a>.
+      <AutoAcmgChips :result="autoAcmgResult" />
     </v-card-text>
     <v-card-text>
       <div>

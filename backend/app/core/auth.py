@@ -57,6 +57,12 @@ bearer_transport = BearerTransport(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 
 class CookieRedirectTransport(CookieTransport):
+    # REEV patch: allow cookies over plain HTTP (cookie_secure defaults to True,
+    # which makes browsers drop the session cookie on http:// deployments).
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("cookie_secure", False)
+        super().__init__(*args, **kwargs)
+
     async def get_login_response(self, token: str) -> Response:
         response = await super().get_login_response(token)
         response.status_code = 302

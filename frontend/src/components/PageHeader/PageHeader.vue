@@ -112,6 +112,20 @@ function toggleTheme() {
           <v-list-item id="terms" to="/info#terms-of-use">
             <v-list-item-title> Terms of Use </v-list-item-title>
           </v-list-item>
+          <v-list-item
+            id="db-monitor"
+            href="https://monitor.neuropedialab.org/"
+            target="_blank"
+          >
+            <v-list-item-title> Monitor de BDs </v-list-item-title>
+          </v-list-item>
+          <v-list-item
+            id="exome-advisor"
+            href="https://exomecoverage.neuropedialab.org"
+            target="_blank"
+          >
+            <v-list-item-title> Exome Advisor </v-list-item-title>
+          </v-list-item>
         </v-list>
       </v-menu>
     </v-container>
