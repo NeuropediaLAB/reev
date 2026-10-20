@@ -105,11 +105,91 @@ async def variantvalidator(request: Request, path: str):
     )
 
 
+def _genome_build_to_acmg(build: str) -> str:
+    """Map WinterVar build names ('hg19'/'hg38') to auto-acmg genome release ('GRCh37'/'GRCh38')."""
+    return "GRCh37" if build.lower() in ("hg19", "grch37") else "GRCh38"
+
+
+def _genome_build_to_gnomad(build: str) -> str:
+    """Map WinterVar build names to auto-acmg gnomAD-style prefix ('GRCh37'/'GRCh38')."""
+    return "GRCh37" if build.lower() in ("hg19", "grch37") else "GRCh38"
+
+
+async def _call_auto_acmg(
+    client: httpx.AsyncClient,
+    chromosome: str,
+    position: str,
+    reference: str,
+    alternative: str,
+    build: str,
+) -> dict[str, bool] | None:
+    """Call the local auto-acmg service and return an ACMG rating dict, or None on failure.
+
+    Uses gnomAD-style variant_name (e.g. 'grch37-4-113568536-G-GA') which auto-acmg
+    resolves directly from coordinates without calling dotty.
+    """
+    genome_release = _genome_build_to_acmg(build)
+    gnomad_prefix = _genome_build_to_gnomad(build)
+    variant_name = f"{gnomad_prefix}-{chromosome}-{position}-{reference}-{alternative}"
+    url = (
+        f"http://auto-acmg:8080/api/v1/predict/seqvar"
+        f"?variant_name={variant_name}&genome_release={genome_release}"
+    )
+    try:
+        resp = await client.get(url, timeout=httpx.Timeout(120.0))
+        if resp.is_error:
+            return None
+        data = resp.json()
+        criteria = data.get("prediction", {}).get("criteria", {})
+        rating = default_acmg_rating()
+        for key in rating:
+            crit = criteria.get(key, {})
+            rating[key] = crit.get("prediction") == "applicable"
+        return rating
+    except Exception:
+        return None
+
+
+async def _call_auto_acmg_strucvar(
+    client: httpx.AsyncClient,
+    sv_type: str,
+    chromosome: str,
+    start: str,
+    end: str,
+    genome_release: str,
+) -> dict | None:
+    """Call the local auto-acmg service for structural variant (CNV) prediction.
+
+    Formats the variant name as 'DEL:chrX:start:end' (colon-separated) which
+    auto-acmg resolves via its StrucVarResolver.
+
+    Returns the full prediction dict (with 'prediction' key) or None on failure.
+    """
+    gr = _genome_build_to_acmg(genome_release)
+    # auto-acmg accepts DEL/DUP prefix with colon-separated coordinates
+    sv_type_upper = sv_type.upper()  # DEL or DUP
+    variant_name = f"{sv_type_upper}:chr{chromosome}:{start}:{end}"
+    url = (
+        f"http://auto-acmg:8080/api/v1/predict/strucvar"
+        f"?variant_name={variant_name}&genome_release={gr}"
+    )
+    try:
+        resp = await client.get(url, timeout=httpx.Timeout(180.0))
+        if resp.is_error:
+            return None
+        return resp.json()
+    except Exception:
+        return None
+
+
 @router.get("/acmg/{path:path}")
 async def acmg(request: Request):
     """
     Implement searching for ACMG classification for SNVs and indels.
-    Proxy requests to the `WinterVar <http://wintervar.wglab.org/>`_ backend.
+
+    Tries the local auto-acmg service first (supports all variant types).
+    Falls back to the `WinterVar <http://wintervar.wglab.org/>`_ external API
+    (missense SNVs only) if auto-acmg is unavailable.
 
     :param request: request
     :type request: :class:`fastapi.Request`
@@ -126,12 +206,19 @@ async def acmg(request: Request):
     if not chromosome or not position or not reference or not alternative or not build:
         return Response(status_code=400, content="Missing query parameters")
 
+    client = httpx_client_wrapper()
+
+    # Try auto-acmg first (handles all variant types: SNVs, indels, etc.)
+    auto_acmg_rating = await _call_auto_acmg(client, chromosome, position, reference, alternative, build)
+    if auto_acmg_rating is not None:
+        return JSONResponse(auto_acmg_rating)
+
+    # Fall back to WinterVar (missense SNVs only)
     url = (
         f"http://wintervar.wglab.org/api_new.php?"
         f"queryType=position&chr={chromosome}&pos={position}"
         f"&ref={reference}&alt={alternative}&build={build}"
     )
-    client = httpx_client_wrapper()
     backend_req = client.build_request(method="GET", url=url)
     backend_resp = await client.send(backend_req)
     if backend_resp.is_error:
@@ -140,15 +227,42 @@ async def acmg(request: Request):
     try:
         backend_json = backend_resp.json()
     except json.JSONDecodeError:
-        return Response(
-            status_code=500, content=json.dumps({"error": "Invalid response from Intervar"})
-        )
+        # WinterVar returns plain text for unsupported variant types (e.g. insertions).
+        # Return a default (all-False) rating so the frontend shows "no prediction".
+        return JSONResponse(default_acmg_rating())
 
     acmg_rating = default_acmg_rating()
     for key, value in backend_json.items():
         if key.lower() in acmg_rating:
             acmg_rating[key.lower()] = value == 1
     return JSONResponse(acmg_rating)
+
+
+@router.get("/acmg-strucvar/")
+async def acmg_strucvar(request: Request):
+    """
+    Return auto-acmg structural variant (CNV) ACMG criteria prediction.
+
+    Uses the local auto-acmg service (/api/v1/predict/strucvar) to evaluate
+    deletions and duplications according to ACMG/ClinGen SV guidelines.
+
+    Query params: sv_type (DEL|DUP), chromosome, start, end, genome_release
+    """
+    query_params = request.query_params
+    sv_type = query_params.get("sv_type")
+    chromosome = query_params.get("chromosome")
+    start = query_params.get("start")
+    end = query_params.get("end")
+    genome_release = query_params.get("genome_release", "GRCh38")
+
+    if not sv_type or not chromosome or not start or not end:
+        return Response(status_code=400, content="Missing query parameters (sv_type, chromosome, start, end required)")
+
+    client = httpx_client_wrapper()
+    result = await _call_auto_acmg_strucvar(client, sv_type, chromosome, start, end, genome_release)
+    if result is None:
+        return Response(status_code=502, content="auto-acmg strucvar prediction unavailable")
+    return JSONResponse(result)
 
 
 @router.get("/cnv/acmg/{path:path}")

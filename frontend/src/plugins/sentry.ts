@@ -8,8 +8,12 @@ import { type App } from 'vue'
 import { type Router } from 'vue-router'
 
 export async function setupSentry(app: App, router: Router) {
-  if (!import.meta.env.PROD) {
-    return // don't setup in development
+  // The upstream Sentry DSN points to the bihealth deployment. Deployments that
+  // do not run their own Sentry instance (such as NeuropediaLAB) leave
+  // `VITE_SENTRY_DSN` unset and thus do not report to it at all.
+  const dsn = import.meta.env.VITE_SENTRY_DSN
+  if (!import.meta.env.PROD || !dsn) {
+    return // don't setup in development or without a configured DSN
   }
 
   Sentry.init({
@@ -18,7 +22,7 @@ export async function setupSentry(app: App, router: Router) {
     environment: import.meta.env.SENTRY_ENVIRONMENT ?? 'production',
     release: __APP_VERSION__,
     app,
-    dsn: 'https://ee06fe1f4715e740256c7b762fe0e162@sentry.cubi.bihealth.org/3',
+    dsn,
     integrations: [
       new Sentry.BrowserTracing({
         routingInstrumentation: Sentry.vueRouterInstrumentation(router)

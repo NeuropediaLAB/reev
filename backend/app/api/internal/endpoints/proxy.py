@@ -9,6 +9,9 @@ from app.core.config import settings
 
 router = APIRouter()
 
+# Generous timeout for NAS-backed services (sshfs latency on first access)
+_PROXY_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
+
 
 @router.get("/{path:path}")
 @router.post("/{path:path}")
@@ -52,7 +55,7 @@ async def reverse_proxy(request: Request) -> Response:
         )
 
     if backend_url:
-        client = httpx.AsyncClient()
+        client = httpx.AsyncClient(timeout=_PROXY_TIMEOUT)
         backend_url = backend_url + (f"?{url.query}" if url.query else "")
         backend_req = client.build_request(
             method=request.method,
