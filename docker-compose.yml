@@ -223,6 +223,16 @@ services:
       context: /home/arkantu/workspace/docker/genomic-stack/reev/monitor
       dockerfile: Dockerfile
     image: reev-monitor:latest
+    # Necesario para lanzar download-smart.sh en el namespace del host
+    # (nsenter --mount=/host-proc/1/ns/mnt --net=/host-proc/1/ns/net).
+    pid: host
+    # setns necesita SYS_ADMIN/​SYS_PTRACE y AppArmor por defecto lo bloquea
+    # incluso con las capabilities.
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+    security_opt:
+      - apparmor=unconfined
     ports:
       - "8300:8300"
     environment:
@@ -233,6 +243,17 @@ services:
       NAS_LOG: /mnt/swarm-storage/reev-data/download-smart.log
       SSH_KEY: /root/.ssh/id_ed25519
     volumes:
+      # /proc del host: permite nsenter al namespace del host para ejecutar
+      # download-smart.sh y comprobar procesos (requiere pid: host)
+      - type: bind
+        source: /proc
+        target: /host-proc
+        read_only: true
+      # Script de actualización (referencia; se ejecuta en el namespace del host)
+      - type: bind
+        source: /mnt/reev-data/download-smart.sh
+        target: /nas/download-smart.sh
+        read_only: true
       # NAS data — read-only (sshfs mount propagated from host)
       - type: bind
         source: /mnt/reev-data/volumes/reev-static/data
