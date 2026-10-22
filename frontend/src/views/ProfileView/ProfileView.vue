@@ -9,6 +9,9 @@ import { useUserStore } from '@/stores/user'
 const ProfileCaseCard = defineAsyncComponent(
   () => import('@/components/ProfileCaseCard/ProfileCaseCard.vue')
 )
+const CaseArchiveCard = defineAsyncComponent(
+  () => import('@/components/CaseArchiveCard/CaseArchiveCard.vue')
+)
 const ProfileBookmarksCard = defineAsyncComponent(
   () => import('@/components/ProfileBookmarksCard/ProfileBookmarksCard.vue')
 )
@@ -50,6 +53,7 @@ enum ProfileSection {
   GeneralInfo = 'general-info',
   Bookmarks = 'bookmarks',
   CaseInformation = 'case-information',
+  CaseArchive = 'case-archive',
   AcmgSeqvar = 'acmg-seqvar',
   AcmgStrucvar = 'acmg-strucvar'
 }
@@ -58,6 +62,7 @@ const PROFILE_PAGES = [
   { id: ProfileSection.GeneralInfo, title: 'Overview' },
   { id: ProfileSection.Bookmarks, title: 'Bookmarks' },
   { id: ProfileSection.CaseInformation, title: 'Case information' },
+  { id: ProfileSection.CaseArchive, title: 'Case archive' },
   { id: ProfileSection.AcmgSeqvar, title: 'ACMG Sequence Variant' },
   { id: ProfileSection.AcmgStrucvar, title: 'ACMG Structure Variant' }
 ]
@@ -169,6 +174,12 @@ const mainBackgroundColor = computed(() => {
                 :id="ProfileSection.CaseInformation"
               >
                 <ProfileCaseCard />
+              </div>
+              <div
+                v-if="currentSection === ProfileSection.CaseArchive"
+                :id="ProfileSection.CaseArchive"
+              >
+                <CaseArchiveCard />
               </div>
               <div
                 v-if="currentSection === ProfileSection.AcmgSeqvar"
