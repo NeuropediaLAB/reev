@@ -55,7 +55,7 @@ const switchCriteria = (criteria: AcmgCriteria, presence: Presence) => {
 </script>
 
 <template>
-  <v-card class="mx-auto compact-form" width="150" style="margin: 10px">
+  <v-card class="mx-auto compact-form" width="210" style="margin: 10px">
     <div class="d-flex justify-content-between">
       <v-switch
         :color="findSwitchColor()"
@@ -90,6 +90,13 @@ const switchCriteria = (criteria: AcmgCriteria, presence: Presence) => {
 }
 .select {
   margin: 0px;
+}
+
+/* La etiqueta de fuerza ("Pathogenic Very Strong") debe caber completa:
+   a 16px no entraba en el ancho de la tarjeta y se recortaba con «…». */
+.select :deep(.v-field__input),
+.select :deep(.v-select__selection-text) {
+  font-size: 13px;
 }
 
 .compact-form {
