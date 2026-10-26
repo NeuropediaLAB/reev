@@ -1,11 +1,39 @@
 import typescript from '@rollup/plugin-typescript'
 import vue from '@vitejs/plugin-vue'
+import { readFileSync, writeFileSync } from 'fs'
 import * as path from 'path'
 import ViteFonts from 'unplugin-fonts/vite'
 import { defineConfig } from 'vite'
 import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js'
 import dts from 'vite-plugin-dts'
 import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify'
+
+/**
+ * Strip the font preload tags that unplugin-fonts injects into dist/index.html.
+ *
+ * The Material Design Icons font ships as eot/ttf/woff/woff2 and unplugin-fonts
+ * preloads every one of them, which triggers the console errors
+ * "link rel=preload has an unsupported `type` value" (eot) and
+ * "preloaded ... but not used within a few seconds" (the other formats), plus
+ * ~2 MB of useless font traffic per page load. The @font-face rules only use
+ * woff2, so the preloads are dropped and the browser fetches what it needs.
+ */
+function stripFontPreloads() {
+  return {
+    name: 'strip-font-preloads',
+    apply: 'build' as const,
+    closeBundle() {
+      const htmlPath = path.resolve(__dirname, 'dist/index.html')
+      const html = readFileSync(htmlPath, 'utf-8')
+      const cleaned = html.replace(/\s*<link\b[^>]*rel="preload"[^>]*as="font"[^>]*>/gi, '')
+      if (cleaned !== html) {
+        writeFileSync(htmlPath, cleaned)
+        // eslint-disable-next-line no-console
+        console.log('strip-font-preloads: removed font preloads from dist/index.html')
+      }
+    }
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -36,7 +64,8 @@ export default defineConfig({
           }
         ]
       }
-    })
+    }),
+    stripFontPreloads()
   ],
   resolve: {
     alias: {

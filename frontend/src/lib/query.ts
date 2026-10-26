@@ -16,6 +16,28 @@ import {
 import { type RouteLocationRaw } from 'vue-router'
 
 /**
+ * Normalize common copy/paste variants of query terms.
+ *
+ * Clinical reports and PDFs often render `NM_006767.4:c.1199T>C` with a space
+ * instead of the `:` separating the accessor from the description; dotty
+ * rejects such input with HTTP 400 ("Invalid HGVS description"), so the
+ * separator is repaired here before the term reaches any lookup.
+ *
+ * @param queryTerm The raw query term as entered by the user.
+ *
+ * @returns The query term with the accessor/description separator repaired.
+ */
+export function normalizeQueryTerm(queryTerm: string): string {
+  const term = queryTerm.trim().replace(/\s+/g, ' ')
+  // "NM_006767.4 c.1199T>C" -> "NM_006767.4:c.1199T>C"
+  // "ENST00000333634.12 c.1199T>C" -> "ENST00000333634.12:c.1199T>C"
+  return term.replace(
+    /^((?:[NX][MRGCTW]_|ENS[A-Z]*[GT])\d+\.\d+)\s+([cngm]\.)/i,
+    '$1:$2'
+  )
+}
+
+/**
  * Attempt to translate the variant with dotty to SPDI.
  *
  * @param queryTerm   The query term to lookup.
@@ -28,6 +50,7 @@ export async function lookupWithDotty(
   queryTerm: string,
   genomeBuild: GenomeBuild
 ): Promise<Seqvar> {
+  queryTerm = normalizeQueryTerm(queryTerm)
   const dottyClient = new DottyClient()
   const result = await dottyClient.toSpdi(queryTerm, genomeBuild === 'grch37' ? 'GRCh37' : 'GRCh38')
 
@@ -59,6 +82,7 @@ export async function lookupWithDotty(
  * @throws Error in all other cases
  */
 export async function resolveSeqvar(queryTerm: string, genomeBuild: GenomeBuild): Promise<Seqvar> {
+  queryTerm = normalizeQueryTerm(queryTerm)
   try {
     return parseSeparatedSeqvar(queryTerm, genomeBuild)
   } catch (err) {
