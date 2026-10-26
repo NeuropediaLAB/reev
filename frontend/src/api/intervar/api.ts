@@ -1,9 +1,19 @@
 import type { Seqvar } from '@bihealth/reev-frontend-lib/lib/genomicVars'
 
 import { API_INTERNAL_BASE_PREFIX } from '@/api/common'
-import type { AcmgRatingBackend } from '@/stores/seqvarAcmgRating'
 
 const API_BASE_URL = `${API_INTERNAL_BASE_PREFIX}`
+
+/**
+ * ACMG rating as returned by the internal `remote/acmg` endpoint.
+ *
+ * The endpoint is a flat map of criterion id (`pm2`, `pp3`, ...) to a boolean;
+ * the strength auto-acmg assigned to each applicable criterion (when known)
+ * travels in the `_strengths` side channel.
+ */
+export type InterVarAcmgRating = Record<string, boolean> & {
+  _strengths?: Record<string, string>
+}
 
 export class InterVarClient {
   private apiBaseUrl: string
@@ -17,7 +27,7 @@ export class InterVarClient {
   /**
    * Fetch ACMG rating from InterVar via proxy.
    */
-  async fetchAcmgRating(seqvar: Seqvar): Promise<AcmgRatingBackend> {
+  async fetchAcmgRating(seqvar: Seqvar): Promise<InterVarAcmgRating> {
     const { genomeBuild, chrom, pos, del, ins } = seqvar
     const release = genomeBuild === 'grch37' ? 'hg19' : 'hg38'
     const url =

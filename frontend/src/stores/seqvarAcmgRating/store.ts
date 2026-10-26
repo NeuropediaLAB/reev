@@ -10,6 +10,7 @@ import { ref } from 'vue'
 import { AcmgSeqVarClient } from '@/api/acmgSeqvar'
 import { InterVarClient } from '@/api/intervar'
 import {
+  ACMG_STRENGTH_TO_EVIDENCE_LEVEL,
   ALL_ACMG_CRITERIA,
   AcmgCriteria,
   AcmgEvidenceLevel,
@@ -70,7 +71,15 @@ export const useSeqvarAcmgRatingStore = defineStore('seqvarAcmgRating', () => {
       comment: ''
     }
     for (const criteriaKey of ALL_ACMG_CRITERIA) {
-      const criteria = acmgRating.value.getCriteriaState(criteriaKey as AcmgCriteria)
+      // Persist only the investigator's own assessment (`StateSource.User`).
+      // Using the merged state here froze the automated calls into the stored
+      // rating — including their "Absent" — and on the next visit the stored
+      // rating (loaded into `StateSource.Server`, which overrides `InterVar`
+      // in `ALL_STATE_SOURCES`) hid every criterion that auto-ACMG did flag.
+      const criteria = acmgRating.value.getCriteriaStateFromSource(
+        criteriaKey as AcmgCriteria,
+        StateSource.User
+      )
       acmgRatingBackend.criterias.push({
         criteria: criteriaKey,
         presence: criteria.presence,
@@ -106,25 +115,32 @@ export const useSeqvarAcmgRatingStore = defineStore('seqvarAcmgRating', () => {
     try {
       const client = new InterVarClient()
       const acmgRatingInterVarData = await client.fetchAcmgRating(seqvar$)
+      const interVarStrengths = acmgRatingInterVarData._strengths ?? {}
       // Go through the data and setPresense for each criteria
       for (const [criteriaId, value] of Object.entries(acmgRatingInterVarData)) {
+        // Side channel with the strength auto-acmg assigned to each criterion.
+        if (criteriaId === '_strengths') {
+          continue
+        }
         // Skip pp5 and bp6 criteria as they are not used anymore
         if (criteriaId === 'pp5' || criteriaId === 'bp6') {
           continue
         }
         const criteriaIdKey = criteriaId.toUpperCase() as keyof typeof AcmgCriteria
+        const criteria = AcmgCriteria[criteriaIdKey]
+        if (!criteria) {
+          continue
+        }
         if (value === true) {
-          acmgRating.value.setPresence(
-            StateSource.InterVar,
-            AcmgCriteria[criteriaIdKey],
-            Presence.Present
-          )
+          acmgRating.value.setPresence(StateSource.InterVar, criteria, Presence.Present)
+          // Use the strength reported by the automation instead of leaving the
+          // criterion at the default "supporting" level.
+          const level = ACMG_STRENGTH_TO_EVIDENCE_LEVEL[interVarStrengths[criteriaId] ?? '']
+          if (level) {
+            acmgRating.value.setEvidenceLevel(StateSource.InterVar, criteria, level)
+          }
         } else {
-          acmgRating.value.setPresence(
-            StateSource.InterVar,
-            AcmgCriteria[criteriaIdKey],
-            Presence.Absent
-          )
+          acmgRating.value.setPresence(StateSource.InterVar, criteria, Presence.Absent)
         }
       }
       seqvar.value = seqvar$

@@ -421,6 +421,21 @@ export enum StateSource {
   User = 'User'
 }
 
+/**
+ * Map from the `strength` slug returned by auto-acmg / InterVar to the
+ * evidence level used by the rating UI.
+ */
+export const ACMG_STRENGTH_TO_EVIDENCE_LEVEL: Record<string, AcmgEvidenceLevel> = {
+  pathogenic_very_strong: AcmgEvidenceLevel.PathogenicVeryStrong,
+  pathogenic_strong: AcmgEvidenceLevel.PathogenicStrong,
+  pathogenic_moderate: AcmgEvidenceLevel.PathogenicModerate,
+  pathogenic_supporting: AcmgEvidenceLevel.PathogenicSupporting,
+  benign_standalone: AcmgEvidenceLevel.BenignStandalone,
+  benign_moderate: AcmgEvidenceLevel.BenignModerate,
+  benign_strong: AcmgEvidenceLevel.BenignStrong,
+  benign_supporting: AcmgEvidenceLevel.BenignSupporting
+}
+
 /** All state sources from lowest to highest priority. */
 export const ALL_STATE_SOURCES = [
   StateSource.Default,

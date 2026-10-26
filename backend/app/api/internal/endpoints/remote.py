@@ -142,9 +142,20 @@ async def _call_auto_acmg(
         data = resp.json()
         criteria = data.get("prediction", {}).get("criteria", {})
         rating = default_acmg_rating()
+        strengths: dict[str, str] = {}
         for key in rating:
             crit = criteria.get(key, {})
-            rating[key] = crit.get("prediction") == "applicable"
+            applicable = crit.get("prediction") == "applicable"
+            rating[key] = applicable
+            # Propagate the strength auto-acmg assigned (e.g. PP3 can be
+            # supporting/moderate/strong); the flat rating only carries a
+            # boolean, so the levels travel in a side channel.
+            if applicable:
+                strength = crit.get("strength")
+                if strength:
+                    strengths[key] = strength
+        if strengths:
+            rating["_strengths"] = strengths  # type: ignore[assignment]
         return rating
     except Exception:
         return None
