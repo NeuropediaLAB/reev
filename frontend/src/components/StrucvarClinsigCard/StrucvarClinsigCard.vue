@@ -76,7 +76,7 @@ const fetchAutoAcmg = async (strucvar: Strucvar) => {
 }
 
 /** Helper function to run a function in a try/catch and emit `errorDisplay` otherwise.. */
-const tryCatchEmitErrorDisplay = async (fn: () => Promise<void>) => {
+const tryCatchEmitErrorDisplay = async (fn: () => Promise<unknown>) => {
   try {
     await fn()
   } catch (err) {
