@@ -90,7 +90,7 @@ describe('case store with logged in user', () => {
 
     // assert:
     expect(fetchMocker).toBeCalledTimes(1)
-    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/get', {
+    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/list', {
       method: 'GET',
       credentials: 'include',
       mode: 'cors'
@@ -102,16 +102,14 @@ describe('case store with logged in user', () => {
   it('initialize() should handle not found when loading case', async () => {
     // arrange:
     const store = useCaseInfoStore()
-    fetchMocker.mockResponseOnce(JSON.stringify({ detail: 'Case Information not found' }), {
-      status: 404
-    })
+    fetchMocker.mockResponseOnce(JSON.stringify([]))
 
     // act:
     await store.initialize()
 
     // assert:
     expect(fetchMocker).toBeCalledTimes(1)
-    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/get', {
+    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/list', {
       method: 'GET',
       credentials: 'include',
       mode: 'cors'
@@ -130,7 +128,7 @@ describe('case store with logged in user', () => {
 
     // assert:
     expect(fetchMocker).toBeCalledTimes(1)
-    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/get', {
+    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/list', {
       method: 'GET',
       credentials: 'include',
       mode: 'cors'
@@ -149,7 +147,7 @@ describe('case store with logged in user', () => {
 
     // assert:
     expect(fetchMocker).toBeCalledTimes(1)
-    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/get', {
+    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/list', {
       method: 'GET',
       credentials: 'include',
       mode: 'cors'
@@ -168,7 +166,7 @@ describe('case store with logged in user', () => {
 
     // assert:
     expect(fetchMocker).toBeCalledTimes(1)
-    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/get', {
+    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/list', {
       method: 'GET',
       credentials: 'include',
       mode: 'cors'
@@ -251,14 +249,14 @@ describe('case store with logged in user', () => {
   it('should load case information', async () => {
     // arrange:
     const store = useCaseInfoStore()
-    fetchMocker.mockResponse(JSON.stringify({ ...MOCK_RESPONSE, pseudonym: 'TestPseudonym' }))
+    fetchMocker.mockResponse(JSON.stringify([{ ...MOCK_RESPONSE, pseudonym: 'TestPseudonym' }]))
 
     // act:
     await store.initialize()
 
     // assert:
     expect(fetchMocker).toBeCalledTimes(1)
-    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/get', {
+    expect(fetchMock).toBeCalledWith('/api/v1/caseinfo/list', {
       method: 'GET',
       credentials: 'include',
       mode: 'cors'
@@ -273,7 +271,7 @@ describe('case store with logged in user', () => {
     const updatedCaseInfo = { ...DEFAULT_CASE_INFO, pseudonym: 'test' }
     expect(store.storeState).toBe(StoreState.Initial)
     expect(store.caseInfo).toStrictEqual(DEFAULT_CASE_INFO)
-    fetchMocker.mockResponseOnce(JSON.stringify({ ...MOCK_RESPONSE, pseudonym: 'test' }))
+    fetchMocker.mockResponseOnce(JSON.stringify([{ ...MOCK_RESPONSE, pseudonym: 'test' }]))
     fetchMocker.mockResponseOnce(JSON.stringify({ ...MOCK_RESPONSE, pseudonym: 'test' }))
 
     // act:
@@ -281,7 +279,7 @@ describe('case store with logged in user', () => {
 
     // assert:
     expect(fetchMocker).toBeCalledTimes(2)
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/caseinfo/get', {
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/caseinfo/list', {
       method: 'GET',
       credentials: 'include',
       mode: 'cors'

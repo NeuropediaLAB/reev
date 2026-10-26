@@ -105,9 +105,17 @@ export const useCaseInfoStore = defineStore('caseInfo', () => {
       storeState.value = StoreState.Loading
       try {
         const client = new CaseInfoClient()
-        const result = await client.fetchCaseInfo()
+        // `/caseinfo/list` instead of `/caseinfo/get`: the latter answers 404 when
+        // the user has no case yet, which shows up as a console network error.
+        const result = await client.fetchExistingCaseInfo()
+        if (result === null) {
+          // no case stored on the server yet, keep the defaults
+          clearData()
+          storeState.value = StoreState.Active
+          return
+        }
         if (!isCaseInfo$Api(result)) {
-          throw new Error(`Response is not a valid case info: ${result.message}`)
+          throw new Error('Response is not a valid case info')
         }
         caseInfo.value = CaseInfo.fromJson(result)
 
@@ -140,11 +148,12 @@ export const useCaseInfoStore = defineStore('caseInfo', () => {
       storeState.value = StoreState.Loading
       try {
         const client = new CaseInfoClient()
-        const result: any = await client.fetchCaseInfo()
-        if (result.detail === 'Unauthorized') {
+        const result: any = await client.fetchExistingCaseInfo()
+        if (result && result.detail === 'Unauthorized') {
           storeState.value = StoreState.Error
           return
-        } else if (result.detail === 'Case Information not found') {
+        } else if (result === null) {
+          // no case stored on the server yet, create it now
           await client.createCaseInfo(caseData)
         } else {
           const updatedCase = await client.updateCaseInfo(caseData)

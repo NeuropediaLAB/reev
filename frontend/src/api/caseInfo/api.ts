@@ -1,7 +1,7 @@
 import { API_V1_BASE_PREFIX } from '@/api/common'
 import type { CaseInfo } from '@/stores/caseInfo'
 
-import type { ApiResponse } from './types'
+import type { ApiResponse, CaseInfo$Api, FailureInfo } from './types'
 
 /**
  * Access to the caseinfo part of the API.
@@ -30,6 +30,37 @@ export class CaseInfoClient {
       credentials: 'include'
     })
     return await response.json()
+  }
+
+  /**
+   * Obtains all case information records of the current user.
+   *
+   * Uses the list endpoint on purpose: `/caseinfo/get` answers 404 when the user
+   * has no case yet, which browsers log as a failed request in the console. The
+   * list endpoint answers 200 with an empty array in that case.
+   *
+   * @returns list of case information records, or a failure object
+   */
+  async fetchCaseInfoList(): Promise<CaseInfo$Api[] | FailureInfo> {
+    const response = await fetch(`${this.apiBaseUrl}caseinfo/list`, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'include'
+    })
+    return await response.json()
+  }
+
+  /**
+   * Obtains the case information of the current user, or `null` if none is stored.
+   *
+   * @returns case information, a failure object, or `null` when no case exists
+   */
+  async fetchExistingCaseInfo(): Promise<ApiResponse | null> {
+    const result = await this.fetchCaseInfoList()
+    if (!Array.isArray(result)) {
+      return result as FailureInfo
+    }
+    return result.length === 0 ? null : result[0]
   }
 
   /**
