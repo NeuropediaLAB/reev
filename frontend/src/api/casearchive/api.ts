@@ -5,6 +5,7 @@ import type {
   CaseArchiveSummary,
   CaseVariant,
   CaseVariantCreate,
+  CaseVariantFromHGVS,
   CaseVariantUpdate,
   DataVersion,
   FailureInfo,
@@ -59,6 +60,20 @@ export class CaseArchiveClient {
     payload: CaseVariantCreate
   ): Promise<{ ok: boolean; data: CaseVariant | FailureInfo }> {
     return this.requestJson(`${this.apiBaseUrl}casearchive/${caseId}/variants`, 'POST', payload)
+  }
+
+  /**
+   * Follows a variant given as HGVS; the backend resolves it to SPDI with dotty.
+   */
+  async createVariantFromHgvs(
+    caseId: string,
+    payload: CaseVariantFromHGVS
+  ): Promise<{ ok: boolean; data: CaseVariant | FailureInfo }> {
+    return this.requestJson(
+      `${this.apiBaseUrl}casearchive/${caseId}/variants/from-hgvs`,
+      'POST',
+      payload
+    )
   }
 
   /**

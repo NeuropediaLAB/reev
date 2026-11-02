@@ -48,8 +48,19 @@ export interface CaseVariantCreate {
   follow?: boolean
 }
 
+/** Payload to follow a variant entered as HGVS (e.g. NM_004992.4:c.397C>T). */
+export type CaseVariantFromHGVS = {
+  hgvs: string
+  genome_build?: 'grch37' | 'grch38'
+  gene_symbol?: string | null
+  transcript?: string | null
+  label?: string | null
+  notes?: string | null
+  follow?: boolean
+}
+
 /** Editable fields of a followed variant. */
-export interface CaseVariantUpdate {
+export type CaseVariantUpdate = {
   follow?: boolean
   gene_symbol?: string | null
   transcript?: string | null

@@ -5,6 +5,7 @@ from app.schemas.casearchive import (  # noqa
     AcmgAssessmentRead,
     CaseArchiveSummary,
     CaseVariantCreate,
+    CaseVariantFromHGVS,
     CaseVariantImport,
     CaseVariantRead,
     CaseVariantUpdate,

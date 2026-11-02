@@ -1,8 +1,10 @@
 """Endpoints of the case archive: followed variants, ACMG history and alerts."""
 
+import re
 import uuid
 from datetime import datetime
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,7 @@ from app import schemas
 from app.api import deps
 from app.api.deps import current_active_user
 from app.casearchive import service
+from app.core.config import settings
 from app.models.bookmark import Bookmark
 from app.models.casearchive import (
     AcmgAssessment,
@@ -121,6 +124,101 @@ async def add_case_variant(
         hgnc_id=payload.hgnc_id,
         transcript=payload.transcript,
         label=payload.label,
+        notes=payload.notes,
+        follow=payload.follow,
+        added_at=datetime.utcnow(),
+    )
+    db.add(variant)
+    await db.commit()
+    await db.refresh(variant)
+    return _variant_read(variant, None)
+
+
+@router.post(
+    "/{case_id}/variants/from-hgvs",
+    response_model=schemas.CaseVariantRead,
+    status_code=201,
+)
+async def add_case_variant_from_hgvs(
+    case_id: uuid.UUID,
+    payload: schemas.CaseVariantFromHGVS,
+    db: AsyncSession = Depends(deps.get_db),
+    user: User = Depends(current_active_user),
+):
+    """Follow a variant given as HGVS by first resolving it to SPDI with dotty.
+
+    Accepts transcript-level notation (``NM_004992.4:c.397C>T``, optionally with the
+    ``p.`` part) so variants can be entered from the web without searching for them
+    first. The resolved ``<build>-<contig>-<pos>-<ref>-<alt>`` key is what the rest of
+    the pipeline (auto-acmg, annonars, mehari) uses.
+    """
+    case = await _get_case_or_403(db, case_id, user)
+    assembly = "GRCh38" if payload.genome_build == "grch38" else "GRCh37"
+    # dotty only understands the nucleotide part: drop a trailing protein change
+    # ("NM_004992.4:c.397C>T p.(Arg133Cys)") and normalise whitespace.
+    hgvs_query = re.sub(r"\s+p\.\(?.*$", "", payload.hgvs.strip(), flags=re.IGNORECASE).strip()
+    if ":" not in hgvs_query:
+        raise HTTPException(
+            status_code=422,
+            detail="Falta el transcrito: usa el formato NM_004992.4:c.397C>T",
+        )
+    url = f"{settings.BACKEND_PREFIX_DOTTY.rstrip('/')}/api/v1/to-spdi"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(90.0)) as client:
+            resp = await client.get(url, params={"q": hgvs_query, "assembly": assembly})
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"dotty no disponible: {exc}") from exc
+    if resp.is_error:
+        detail = (resp.json() or {}).get("detail") if resp.headers.get("content-type", "").startswith("application/json") else None
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"No se pudo resolver '{payload.hgvs}' en {assembly}"
+                f" (dotty {resp.status_code}): {detail or 'secuencia no disponible o notación inválida'}"
+            ),
+        )
+    spdi = (resp.json() or {}).get("spdi") or {}
+    contig = spdi.get("contig")
+    pos = spdi.get("pos")
+    ref = spdi.get("reference_deleted")
+    alt = spdi.get("alternate_inserted")
+    if not contig or pos is None or ref is None or alt is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"dotty devolvió una respuesta incompleta para '{payload.hgvs}': {spdi}",
+        )
+    obj_id = f"{payload.genome_build}-{contig}-{pos}-{ref}-{alt}"
+
+    exists = (
+        await db.execute(
+            select(CaseVariant).where(
+                CaseVariant.case_info == case.id,
+                CaseVariant.obj_type == "seqvar",
+                CaseVariant.obj_id == obj_id,
+            )
+        )
+    ).scalars().first()
+    if exists is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La variante ya está en seguimiento en este caso ({obj_id})",
+        )
+
+    transcript = payload.transcript
+    if transcript is None and ":" in payload.hgvs:
+        transcript = payload.hgvs.split(":", 1)[0].strip()
+
+    variant = CaseVariant(
+        case_info=case.id,
+        user=user.id,
+        bookmark=None,
+        obj_type="seqvar",
+        obj_id=obj_id,
+        genome_build=payload.genome_build,
+        gene_symbol=payload.gene_symbol,
+        hgnc_id=None,
+        transcript=transcript,
+        label=payload.label or payload.hgvs,
         notes=payload.notes,
         follow=payload.follow,
         added_at=datetime.utcnow(),

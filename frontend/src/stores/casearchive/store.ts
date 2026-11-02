@@ -11,6 +11,7 @@ import type {
   CaseArchiveSummary,
   CaseVariant,
   CaseVariantCreate,
+  CaseVariantFromHGVS,
   CaseVariantUpdate,
   DataVersion,
   FailureInfo,
@@ -139,6 +140,22 @@ export const useCaseArchiveStore = defineStore('caseArchive', () => {
     }
     const response = await client.createVariant(caseId, payload)
     if (response.ok) {
+      await loadVariants()
+      await loadSummary()
+      return response.data as CaseVariant
+    }
+    return handleFailure(response.data as FailureInfo)
+  }
+
+  /** Follow a variant within the current case, given as HGVS. */
+  const followHgvs = async (payload: CaseVariantFromHGVS): Promise<CaseVariant | null> => {
+    const caseId = await currentCaseId()
+    if (caseId === null) {
+      return null
+    }
+    const response = await client.createVariantFromHgvs(caseId, payload)
+    if (response.ok) {
+      message.value = null
       await loadVariants()
       await loadSummary()
       return response.data as CaseVariant
@@ -285,6 +302,7 @@ export const useCaseArchiveStore = defineStore('caseArchive', () => {
     loadAlerts,
     loadHistory,
     followVariant,
+    followHgvs,
     updateVariant,
     unfollowVariant,
     importBookmarks,

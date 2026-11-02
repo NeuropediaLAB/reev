@@ -23,6 +23,18 @@ class CaseVariantCreate(BaseModel):
     follow: bool = True
 
 
+class CaseVariantFromHGVS(BaseModel):
+    """Payload to follow a variant given as HGVS (e.g. ``NM_004992.4:c.397C>T``)."""
+
+    hgvs: str = Field(min_length=3, max_length=512)
+    genome_build: str = Field(default="grch38", pattern="^(grch37|grch38)$")
+    gene_symbol: str | None = None
+    transcript: str | None = None
+    label: str | None = None
+    notes: str | None = None
+    follow: bool = True
+
+
 class CaseVariantUpdate(BaseModel):
     """Editable fields of a followed variant."""
 

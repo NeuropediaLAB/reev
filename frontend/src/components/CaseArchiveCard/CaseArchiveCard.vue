@@ -16,6 +16,36 @@ const expandedHistory: Record<string, boolean> = reactive({})
 const busyVariant = ref<string | null>(null)
 /** Whether a case-wide re-analysis is running. */
 const busyCase = ref(false)
+/** HGVS typed by the user to follow a variant. */
+const hgvsInput = ref('')
+/** Genome build used to resolve the HGVS. */
+const hgvsBuild = ref<'grch37' | 'grch38'>('grch38')
+/** Optional gene symbol typed by the user. */
+const hgvsGene = ref('')
+/** Whether an HGVS variant is being added. */
+const busyHgvs = ref(false)
+
+/** Follow the variant typed as HGVS; the backend resolves it with dotty. */
+const addHgvs = async () => {
+  const value = hgvsInput.value.trim()
+  if (value === '') {
+    return
+  }
+  busyHgvs.value = true
+  try {
+    const created = await caseArchiveStore.followHgvs({
+      hgvs: value,
+      genome_build: hgvsBuild.value,
+      gene_symbol: hgvsGene.value.trim() || null
+    })
+    if (created) {
+      hgvsInput.value = ''
+      hgvsGene.value = ''
+    }
+  } finally {
+    busyHgvs.value = false
+  }
+}
 
 /** Variant id for which history has been requested. */
 const loadHistoryFor = async (variant: CaseVariant) => {
@@ -171,6 +201,53 @@ onMounted(async () => {
             Data versions
           </v-btn>
         </div>
+
+        <!-- Add a variant by HGVS -->
+        <v-row dense class="mb-4 align-center">
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="hgvsInput"
+              label="Variante por HGVS (transcrito:c., p. opcional)"
+              placeholder="NM_004992.4:c.397C>T p.(Arg133Cys)"
+              prepend-inner-icon="mdi-dna"
+              variant="outlined"
+              density="compact"
+              hide-details
+              @keyup.enter="addHgvs"
+            />
+          </v-col>
+          <v-col cols="6" md="2">
+            <v-select
+              v-model="hgvsBuild"
+              :items="['grch38', 'grch37']"
+              label="Ensamblado"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="6" md="2">
+            <v-text-field
+              v-model="hgvsGene"
+              label="Gen (opcional)"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" md="2">
+            <v-btn
+              block
+              color="primary"
+              variant="tonal"
+              prepend-icon="mdi-plus"
+              :loading="busyHgvs"
+              @click="addHgvs"
+            >
+              Seguir
+            </v-btn>
+          </v-col>
+        </v-row>
 
         <!-- Unread alerts -->
         <v-card v-if="unreadAlerts.length" variant="tonal" color="warning" class="mb-4">
