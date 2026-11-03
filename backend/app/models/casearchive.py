@@ -185,7 +185,11 @@ class DataVersion(Base):
     """Known version of a reference database, used to detect updates."""
 
     __tablename__ = "data_version"
-    __table_args__ = (UniqueConstraint("source", "version", name="uq_data_version"),)
+    #: A database can legitimately report the same version for both builds (same
+    #: upstream release), so the genome build has to be part of the key.
+    __table_args__ = (
+        UniqueConstraint("source", "version", "genome_build", name="uq_data_version"),
+    )
 
     id: Mapped[uuid_module.UUID] = mapped_column(
         GUID, primary_key=True, index=True, default=uuid_module.uuid4
