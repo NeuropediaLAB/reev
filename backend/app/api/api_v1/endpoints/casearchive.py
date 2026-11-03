@@ -187,7 +187,57 @@ async def add_case_variant_from_hgvs(
             status_code=422,
             detail=f"dotty devolvió una respuesta incompleta para '{payload.hgvs}': {spdi}",
         )
+    # dotty accepts an HGVS whose reference base does not match the transcript and
+    # answers with a degenerate variant (alt '.', i.e. no change). Reject it: it
+    # almost always means the notation belongs to another transcript/version.
+    if str(alt).strip() in ("", ".", "-"):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"La base de referencia de '{hgvs_query}' no coincide con la secuencia del"
+                f" transcrito {hgvs_query.split(':', 1)[0]} en {assembly}. Revisa la notación"
+                " y que el transcrito sea el correcto (NM_ y versión)."
+            ),
+        )
     obj_id = f"{payload.genome_build}-{contig}-{pos}-{ref}-{alt}"
+
+    # Round-trip check: ask mehari which c. change the resolved variant really is and
+    # compare it with what the user typed. Catches wrong transcripts, wrong versions and
+    # mistyped positions before anything is stored.
+    c_part = hgvs_query.split(":", 1)[1].strip()
+    transcript_id = hgvs_query.split(":", 1)[0].strip()
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
+            csq = await client.get(
+                f"{settings.BACKEND_PREFIX_MEHARI.rstrip('/')}/seqvars/csq",
+                params={
+                    "genome_release": payload.genome_build,
+                    "chromosome": contig,
+                    "position": pos,
+                    "reference": ref,
+                    "alternative": alt,
+                },
+            )
+        rows = (csq.json().get("result") or []) if csq.status_code == 200 else []
+    except httpx.HTTPError:
+        rows = []
+    computed = next(
+        (
+            r.get("hgvs_c")
+            for r in rows
+            if str(r.get("feature_id", "")).split(".")[0] == transcript_id.split(".")[0]
+        ),
+        None,
+    )
+    if computed is not None and computed.replace(" ", "") != c_part.replace(" ", ""):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"'{hgvs_query}' resuelve a {obj_id}, pero mehari lo describe como"
+                f" {transcript_id}:{computed}. La notación no cuadra con ese transcrito en"
+                f" {assembly}; no se ha guardado nada."
+            ),
+        )
 
     exists = (
         await db.execute(
