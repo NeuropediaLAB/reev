@@ -36,6 +36,18 @@ DB_GROUPS = [
         ],
     },
     {
+        "id": "annonars-grch37", "label": "Annonars GRCh37", "icon": "🧬",
+        "acronym": "ANNOtation of NucleotidE vaRiantS",
+        "path": DATA_DIR / "annonars/grch37",
+        "description": "Bases de anotación de variantes para GRCh37 (hg19): gnomAD 2.1.1, CADD, dbNSFP, AlphaMissense, ClinVar, conservación y variantes estructurales. Necesario para casos antiguos o pipelines que siguen en hg19.",
+    },
+    {
+        "id": "mehari-grch37", "label": "Mehari GRCh37", "icon": "🔬",
+        "acronym": "Molecular Effect and HGVS Annotation Resource Infrastructure",
+        "path": DATA_DIR / "mehari/grch37",
+        "description": "Transcriptos RefSeq y Ensembl con coordenadas GRCh37 para el cálculo de efectos HGVS de variantes hg19.",
+    },
+    {
         "id": "annonars-genes", "label": "Annonars Genes", "icon": "🔗",
         "acronym": "ANNOtation of NucleotidE vaRiantS",
         "path": DATA_DIR / "annonars",
@@ -57,7 +69,7 @@ DB_GROUPS = [
     {
         "id": "viguno", "label": "Viguno / HPO", "icon": "🏥",
         "acronym": "Variant Interpretation with Gene and UNified Ontology",
-        "path": DATA_DIR / "viguno",
+        "path": DATA_DIR / "hpo",
         "description": "Human Phenotype Ontology (HPO) y sus asociaciones gen-fenotipo. Utilizada por CADA-Prio para priorizar variantes candidatas según el fenotipo clínico del paciente.",
     },
     {

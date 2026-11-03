@@ -1,0 +1,16 @@
+[Unit]
+Description=REEV — comprobación y actualización de bases de referencia
+Documentation=file:/home/arkantu/produccion/reev/update-databases.sh
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=arkantu
+WorkingDirectory=/home/arkantu/produccion/reev
+ExecStart=/usr/bin/bash /home/arkantu/produccion/reev/update-databases.sh --apply
+TimeoutStartSec=8h
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=append:/home/arkantu/produccion/reev/download-update.log
+StandardError=append:/home/arkantu/produccion/reev/download-update.log

@@ -1,0 +1,11 @@
+[Unit]
+Description=REEV — actualización semanal de bases de referencia (ClinVar, HPO, annonars)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=reev-update-databases.service
+
+[Install]
+WantedBy=timers.target

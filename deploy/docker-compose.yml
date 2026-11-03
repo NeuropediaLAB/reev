@@ -1,10 +1,6 @@
 ---
 # REEV v0.6.0 — Khazad-dum deployment (no traefik, NPM handles SSL)
-#
-# Backend/celery run the locally built image `neuropedialab/reev:0.6.0-neuropedia2`,
-# built from NeuropediaLAB/reev@neuropedia. UI and backend patches are now part of
-# that source tree, so no patch files are bind-mounted any more.
-# Data on NAS via sshfs: /mnt/reev-data/ (= .193 /mnt/raid-ssd-pi-nas/reev)
+# Data local en el NVMe de datos: /mnt/datos-1tb/reev/ (migrado desde .193 el 2026-11-02)
 
 version: "3.9"
 
@@ -22,14 +18,14 @@ x-service-internal: &service_internal
   <<: *service_default
   volumes:
     - type: bind
-      source: /mnt/reev-data/volumes/reev-static/data
+      source: /mnt/datos-1tb/reev/volumes/reev-static/data
       target: /data
 
 x-service-reev-default: &service_reev_default
   <<: *service_default
   image: "ghcr.io/bihealth/reev:main"
   environment:
-    POSTGRES_PASSWORD: "REDACTED-POSTGRES-PASSWORD"
+    POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
   secrets:
     - db-password
   depends_on:
@@ -54,10 +50,10 @@ services:
     image: nginx:1
     volumes:
       - type: bind
-        source: /mnt/reev-data/volumes/reev-static/data
+        source: /mnt/datos-1tb/reev/volumes/reev-static/data
         target: /data
       - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/config/nginx/nginx.conf
+        source: /home/arkantu/produccion/reev/config/nginx/nginx.conf
         target: /etc/nginx/nginx.conf
 
   # -- REEV backend ----------------------------------------------------------
@@ -65,25 +61,25 @@ services:
     <<: *service_reev_default
     container_name: reev-backend
     hostname: reev-backend
-    image: "neuropedialab/reev:0.6.0-neuropedia2"
+    image: "neuropedialab/reev:0.6.0-neuropedia17"
     ports:
       - "8200:8080"
     environment:
       FORWARDED_ALLOW_IPS: "*"
-      POSTGRES_PASSWORD: "REDACTED-POSTGRES-PASSWORD"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
       POSTGRES_HOST: postgres
       SERVE_FRONTEND: /home/reev/ui
       FIRST_SUPERUSER_EMAIL: "arkantu@gmail.com"
-      FIRST_SUPERUSER_PASSWORD: "REDACTED-PASSWORD"
+      FIRST_SUPERUSER_PASSWORD: "${FIRST_SUPERUSER_PASSWORD}"
 
   # -- REEV celery worker ----------------------------------------------------
   reev-celery-worker:
     <<: *service_reev_default
     container_name: reev-celery-worker
     hostname: reev-celery-worker
-    image: "neuropedialab/reev:0.6.0-neuropedia2"
+    image: "neuropedialab/reev:0.6.0-neuropedia17"
     environment:
-      POSTGRES_PASSWORD: "REDACTED-POSTGRES-PASSWORD"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
       POSTGRES_HOST: postgres
     entrypoint:
       - /entrypoint-celery-worker.sh
@@ -93,9 +89,9 @@ services:
     <<: *service_reev_default
     container_name: reev-celery-beat
     hostname: reev-celery-beat
-    image: "neuropedialab/reev:0.6.0-neuropedia2"
+    image: "neuropedialab/reev:0.6.0-neuropedia17"
     environment:
-      POSTGRES_PASSWORD: "REDACTED-POSTGRES-PASSWORD"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
       POSTGRES_HOST: postgres
     entrypoint:
       - /entrypoint-celery-beat.sh
@@ -110,8 +106,16 @@ services:
       DATA_DIR: /data/dotty
     volumes:
       - type: bind
-        source: /mnt/reev-data/volumes/reev-static/data/download/dotty/2024-12-20
+        source: /mnt/datos-1tb/reev/volumes/reev-static/data/download/dotty/2024-12-20
         target: /data/dotty
+      # Some RefSeq transcripts carry short segments absent from the reference
+      # genome (SHANK3 NM_001372044.2: 39 tx bases between exons 11 and 12).
+      # hgvs refuses to map any c./n. variant of such a transcript
+      # ("Exons X and Y are not adjacent", biocommons/hgvs#386), so dotty
+      # answers 500 and REEV cannot resolve the variant. core.py here is the
+      # image's file plus RepairingDataProvider, which closes those holes.
+      # See volumes/dotty-patches/README.md
+      - "./volumes/dotty-patches/core.py:/home/dotty/dotty/core.py:ro"
 
   # -- Mehari ----------------------------------------------------------------
   mehari:
@@ -123,7 +127,7 @@ services:
       PATH_DB: /data/mehari
     volumes:
       - type: bind
-        source: /mnt/reev-data/volumes/reev-static/data/mehari
+        source: /mnt/datos-1tb/reev/volumes/reev-static/data/mehari
         target: /data/mehari
         read_only: true
 
@@ -146,25 +150,45 @@ services:
         hard: 1048576
 
   # -- Auto-ACMG ------------------------------------------------------------
-#   auto-acmg:
-#     <<: *service_default
-#     container_name: reev-auto-acmg
-#     hostname: auto-acmg
-#     image: "ghcr.io/bihealth/auto-acmg:main"
-#     environment:
-#       AUTO_ACMG_API_ANNONARS_URL: "http://annonars:8080"
-#       AUTO_ACMG_API_MEHARI_URL: "http://mehari:8080"
-#       AUTO_ACMG_API_DOTTY_URL: "http://dotty:8080"
-#       AUTO_ACMG_SEQREPO_DATA_DIR: "/home/auto-acmg/seqrepo/master"
-#     volumes:
-#       - type: bind
-#         source: /mnt/reev-data/volumes/reev-static/data/download/dotty/2024-12-20
-#         target: /home/auto-acmg/seqrepo/master
-#         read_only: true
-#     depends_on:
-#       - annonars
-#       - dotty
-#       - mehari
+  auto-acmg:
+    <<: *service_default
+    container_name: reev-auto-acmg
+    hostname: auto-acmg
+    image: "ghcr.io/bihealth/auto-acmg:main"
+    ports:
+      - "3017:8080"
+    environment:
+      AUTO_ACMG_API_ANNONARS_URL: "http://annonars:8080"
+      AUTO_ACMG_API_MEHARI_URL: "http://mehari:8080"
+      AUTO_ACMG_API_DOTTY_URL: "http://dotty:8080"
+      AUTO_ACMG_SEQREPO_DATA_DIR: "/home/auto-acmg/seqrepo/master"
+    volumes:
+      # seqrepo de auto-acmg: antes apuntaba a volumes/seqrepo/... (directorio vacío,
+      # nunca se pobló). Ahora comparte el de dotty, reparado y verificado el 2026-11-03.
+      - type: bind
+        source: /mnt/datos-1tb/reev/volumes/reev-static/data/download/dotty/2024-12-20/seqrepo
+        target: /home/auto-acmg/seqrepo/master
+        read_only: true
+      # Mehari >= 0.25 emits non-coding transcripts without codon fields; the
+      # stock auto-acmg models reject the whole payload, so these patched
+      # files tolerate/skip them (see volumes/auto-acmg-patches/README.md).
+      - "./volumes/auto-acmg-patches/mehari.py:/auto-acmg/src/defs/mehari.py:ro"
+      - "./volumes/auto-acmg-patches/utils.py:/auto-acmg/src/utils.py:ro"
+      - "./volumes/auto-acmg-patches/auto_acmg.py:/auto-acmg/src/auto_acmg.py:ro"
+      - "./volumes/auto-acmg-patches/seqvar.py:/auto-acmg/src/defs/seqvar.py:ro"
+      - "./volumes/auto-acmg-patches/strucvar.py:/auto-acmg/src/defs/strucvar.py:ro"
+      # GRCh37 annonars payloads lack afGrpmax/anGrpmax and dbscSNV ada/rf; these
+      # patches add raw-AF fallbacks (PM2/BA1/BS1/BS2) and skip the splicing part
+      # of PP3/BP4 instead of failing the whole criterion.
+      - "./volumes/auto-acmg-patches/auto_pm2_ba1_bs1_bs2.py:/auto-acmg/src/seqvar/auto_pm2_ba1_bs1_bs2.py:ro"
+      - "./volumes/auto-acmg-patches/auto_pp3_bp4.py:/auto-acmg/src/seqvar/auto_pp3_bp4.py:ro"
+      # LZTR1 -> RASopathy VCEP predictor overrides PM2/BA1/BS1/BS2 with its own
+      # copy of the AF logic; keep it in sync with the generic one.
+      - "./volumes/auto-acmg-patches/rasopathy.py:/auto-acmg/src/vcep/rasopathy.py:ro"
+    depends_on:
+      - annonars
+      - dotty
+      - mehari
 
   # -- cada-prio -------------------------------------------------------------
   cada-prio:
@@ -189,7 +213,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/db-password
     volumes:
       - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/postgres/data
+        source: /home/arkantu/produccion/reev/volumes/postgres/data
         target: /var/lib/postgresql/data
 
   # -- Redis -----------------------------------------------------------------
@@ -200,7 +224,7 @@ services:
     image: redis:7
     volumes:
       - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/redis/data
+        source: /home/arkantu/produccion/reev/volumes/redis/data
         target: /data
 
   # -- RabbitMQ --------------------------------------------------------------
@@ -211,7 +235,7 @@ services:
     image: rabbitmq:3
     volumes:
       - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/rabbitmq/data
+        source: /home/arkantu/produccion/reev/volumes/rabbitmq/data
         target: /var/lib/rabbitmq
 
   # -- REEV DB Monitor -------------------------------------------------------
@@ -220,14 +244,14 @@ services:
     container_name: reev-monitor
     hostname: reev-monitor
     build:
-      context: /home/arkantu/workspace/docker/genomic-stack/reev/monitor
+      context: /home/arkantu/produccion/reev/monitor
       dockerfile: Dockerfile
     image: reev-monitor:latest
-    # Necesario para lanzar download-smart.sh en el namespace del host
-    # (nsenter --mount=/host-proc/1/ns/mnt --net=/host-proc/1/ns/net).
+    # Necesario para lanzar download-smart.sh en el namespace del host:
+    # nsenter --mount=/host-proc/1/ns/mnt --net=/host-proc/1/ns/net
     pid: host
-    # setns necesita SYS_ADMIN/​SYS_PTRACE y AppArmor por defecto lo bloquea
-    # incluso con las capabilities.
+    # nsenter necesita SYS_ADMIN (setns) y SYS_PTRACE (leer /proc/PID/ns);
+    # AppArmor por defecto bloquea ese acceso incluso con las capabilities.
     cap_add:
       - SYS_ADMIN
       - SYS_PTRACE
@@ -238,9 +262,12 @@ services:
     environment:
       DATA_DIR: /nas/data
       LOG_FILE: /nas/download-smart.log
+      DL_SCRIPT: /nas/download-smart.sh
+      HOST_SCRIPT: /mnt/datos-1tb/reev/download-smart.sh
+      HOST_UPDATE_SCRIPT: /mnt/datos-1tb/reev/update-databases.sh
       NAS_HOST: "192.168.0.193"
-      NAS_SCRIPT: /mnt/swarm-storage/reev-data/download-smart.sh
-      NAS_LOG: /mnt/swarm-storage/reev-data/download-smart.log
+      NAS_SCRIPT: /mnt/datos-1tb/reev/download-smart.sh
+      NAS_LOG: /mnt/datos-1tb/reev/download-smart.log
       SSH_KEY: /root/.ssh/id_ed25519
     volumes:
       # /proc del host: permite nsenter al namespace del host para ejecutar
@@ -249,18 +276,18 @@ services:
         source: /proc
         target: /host-proc
         read_only: true
-      # Script de actualización (referencia; se ejecuta en el namespace del host)
-      - type: bind
-        source: /mnt/reev-data/download-smart.sh
-        target: /nas/download-smart.sh
-        read_only: true
       # NAS data — read-only (sshfs mount propagated from host)
       - type: bind
-        source: /mnt/reev-data/volumes/reev-static/data
+        source: /mnt/datos-1tb/reev/volumes/reev-static/data
         target: /nas/data
+      # Script de actualización (referencia; se ejecuta en el namespace del host)
+      - type: bind
+        source: /mnt/datos-1tb/reev/download-smart.sh
+        target: /nas/download-smart.sh
+        read_only: true
       # Download log — rw para que el monitor pueda escribir entradas propias
       - type: bind
-        source: /mnt/reev-data/download-smart.log
+        source: /mnt/datos-1tb/reev/download-smart.log
         target: /nas/download-smart.log
       # SSH key to trigger NAS update script
       - type: bind
@@ -281,10 +308,10 @@ services:
       - postgres
     volumes:
       - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/volumes/pgadmin/data
+        source: /home/arkantu/produccion/reev/volumes/pgadmin/data
         target: /var/lib/pgadmin
       - type: bind
-        source: /home/arkantu/workspace/docker/genomic-stack/reev/config/pgadmin/servers.json
+        source: /home/arkantu/produccion/reev/config/pgadmin/servers.json
         target: /pgadmin4/servers.json
 
   # -- JBrowse 2 genome browser -----------------------------------------------
@@ -299,20 +326,20 @@ services:
       # La imagen trae el build de JBrowse 2 pero su index.html se sobrescribio
       # con el de bienvenida de nginx; se monta el correcto desde el host.
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-jbrowse2/index.html
+        source: /home/arkantu/produccion/reev/volumes/reev-jbrowse2/index.html
         target: /usr/share/nginx/html/index.html
         read_only: true
       # Config JBrowse: ensamblados hg19/hg38 (2bit remoto de UCSC, con CORS)
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-jbrowse2/config.json
+        source: /home/arkantu/produccion/reev/volumes/reev-jbrowse2/config.json
         target: /usr/share/nginx/html/config.json
         read_only: true
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-jbrowse2/hg19.2bit
+        source: /home/arkantu/produccion/reev/volumes/reev-jbrowse2/hg19.2bit
         target: /usr/share/nginx/html/hg19.2bit
         read_only: true
       - type: bind
-        source: /home/arkantu/workspace/reev/volumes/reev-jbrowse2/hg38.2bit
+        source: /home/arkantu/produccion/reev/volumes/reev-jbrowse2/hg38.2bit
         target: /usr/share/nginx/html/hg38.2bit
         read_only: true
 
@@ -368,9 +395,9 @@ services:
 
 secrets:
   db-password:
-    file: /home/arkantu/workspace/docker/genomic-stack/reev/secrets/db-password
+    file: /home/arkantu/produccion/reev/secrets/db-password
   pgadmin-password:
-    file: /home/arkantu/workspace/docker/genomic-stack/reev/secrets/pgadmin-password
+    file: /home/arkantu/produccion/reev/secrets/pgadmin-password
 
 # == Networks ================================================================
 

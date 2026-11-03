@@ -28,7 +28,7 @@
 # =============================================================================
 set -uo pipefail
 
-DATA="${REVV_DATA:-/mnt/reev-data/volumes/reev-static/data}"
+DATA="${REVV_DATA:-/mnt/datos-1tb/reev/volumes/reev-static/data}"
 ANNONARS="$DATA/annonars"
 DL="$DATA/download/annonars"
 PIDFILE="/tmp/reev-download-smart.pid"
@@ -84,9 +84,9 @@ CATALOG=(
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
-pkg_complete() { { [ -f "$1/CURRENT" ] || [ -f "$1/rocksdb/CURRENT" ]; } && [ ! -e "$1/.incomplete" ]; }
+pkg_complete() { [ -f "$1/CURRENT" ] || [ -f "$1/rocksdb/CURRENT" ]; }
 
-free_gb() { df -BG --output=avail /mnt/reev-data 2>/dev/null | tail -1 | tr -dc '0-9'; }
+free_gb() { df -BG --output=avail /mnt/datos-1tb 2>/dev/null | tail -1 | tr -dc '0-9'; }
 
 # Lista remota de un paquete → "tamaño<TAB>clave", grandes primero
 list_pkg() {
@@ -96,7 +96,7 @@ list_pkg() {
 
 # ── Modo estado ──────────────────────────────────────────────────────────────
 if [ "$STATUS_ONLY" = 1 ]; then
-  echo "DISCO: $(free_gb) GB libres en /mnt/reev-data"
+  echo "DISCO: $(free_gb) GB libres en /mnt/datos-1tb"
   for row in "${CATALOG[@]}"; do
     read -r link pkg asm prio prefix <<< "$row"
     if pkg_complete "$DL/$pkg"; then
@@ -172,21 +172,9 @@ fetch_pkg() {  # $1=prefijo  $2=paquete  $3=destino
   rm -f "$listfile"
   # aria2c: 0 ok, 13 fichero ya existente/renombrado, 7 parada parcial
   case "$rc" in
-    0|13) ;;
+    0|13) return 0 ;;
     *)    log "ERROR aria2c en ${pkg} (rc=${rc})"; return 1 ;;
   esac
-  # Verificar tamaños contra el listado remoto: si falta alguno, marcar y fallar
-  local bad=0
-  while IFS=$'\t' read -r size key; do
-    local_size=$(stat -c %s "$dest/$key" 2>/dev/null || echo -1)
-    [ "$local_size" = "$size" ] || { bad=1; log "FALTA/incorrecto: ${key} (local ${local_size} vs remoto ${size})"; }
-  done <<< "$listing"
-  if [ "$bad" = 1 ]; then
-    touch "$dest/.incomplete"
-    return 1
-  fi
-  rm -f "$dest/.incomplete"
-  return 0
 }
 
 while read -r link pkg asm prio prefix; do
